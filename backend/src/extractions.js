@@ -34,7 +34,11 @@ function rowToExtraction(row, images) {
     name: row.name,
     category: row.category,
     title: row.title,
+    summary: row.summary,
+    description: row.description,
     author: row.author,
+    tags: row.tags,
+    extra: parseJson(row.extra_json, {}),
     last_modified_by: row.last_modified_by,
     subject: row.subject,
     keywords: row.keywords,
@@ -85,17 +89,22 @@ export async function saveExtraction(documentId, data) {
     await conn.execute("DELETE FROM extractions WHERE document_id = ?", [documentId]);
     await conn.execute(
       `INSERT INTO extractions (
-        id, document_id, name, category, title, author, last_modified_by, subject, keywords,
+        id, document_id, name, category, title, summary, description, author, tags, extra_json,
+        last_modified_by, subject, keywords,
         created_at_doc, modified_at_doc, source, filename, word_count, character_count,
         headings, paragraphs, tables_json, key_values, emails, phones, dates
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         extractionId,
         documentId,
         data.name || null,
         data.category || null,
         data.title || null,
+        data.summary || null,
+        data.description || null,
         data.author || null,
+        data.tags || null,
+        jsonValue(data.extra || {}),
         data.last_modified_by || null,
         data.subject || null,
         data.keywords || null,

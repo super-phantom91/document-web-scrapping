@@ -7,7 +7,7 @@ A multi-person, Word-style document editor (React) with live collaboration (Node
 - Google Docs-style shared editing: live text, colored cursors, and presence avatars
 - MS Word-style controls: fonts, sizes, bold/italic/underline, color, highlight, alignment, headings, lists, tables, images, links
 - Import `.docx` into the editor
-- **Extract** button: Python reads the Word file (and current page HTML) and returns name, category, author, images, tables, emails, dates, and key-value fields
+- **Extract** button: Python uses the same strategies as [document-scrapping](https://github.com/super-phantom91/document-scrapping) — inline labels, label-then-value blocks, and tables — and returns name, category, summary, description, author, tags, extra fields, and images
 - Those fields are **saved in MySQL** (`extractions` + `extraction_images` with image BLOBs)
 - Anyone signed in can open a shared document link and edit together
 
@@ -47,7 +47,7 @@ CREATE DATABASE IF NOT EXISTS docusync CHARACTER SET utf8mb4 COLLATE utf8mb4_uni
 
 Tables are created automatically when the Node API starts. Schema is also in `backend/schema.sql`.
 
-- `extractions` — name, category, title, author, headings, tables, emails, dates, key-value fields
+- `extractions` — name, category, summary, description, author, tags, extra_json, images
 - `extraction_images` — image binary (`LONGBLOB`) plus content type and filename
 
 Press **Extract** to write a row (one saved extraction per document). **Saved** reopens the MySQL record without running extraction again.
@@ -77,13 +77,15 @@ npm run dev:frontend
 
 ## Extracted fields
 
-The Python service looks at Word core properties and document text for:
+Python extraction matches [document-scrapping](https://github.com/super-phantom91/document-scrapping):
 
-- Name / title
-- Category / subject
-- Author, dates, keywords
-- Headings (outline)
-- Embedded images
-- Tables
-- `Label: value` pairs such as `Name: …` and `Category: …`
-- Emails, phone numbers, and dates
+1. Walks paragraphs and tables in order
+2. Matches labeled fields with aliases (`Name` / `Title` / `Product Name`, `Category` / `Type`, `Summary` / `Overview`, …)
+3. Supports three irregular layouts:
+   - Inline: `Name: Aurora Desk Lamp`
+   - Block: `Title` on one line, value on the next
+   - Table: label in column 1, value in column 2
+4. Falls back to filename / headings / longest paragraphs when labels are missing
+5. Stores unrecognized labeled fields in `extra_json`
+
+Target fields: **name**, **category**, **summary**, **description**, **author**, **tags**, plus **images**.

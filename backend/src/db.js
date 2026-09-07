@@ -36,6 +36,16 @@ export async function pingMysql() {
   }
 }
 
+async function ensureColumns(pool, table, columns) {
+  for (const [name, definition] of columns) {
+    try {
+      await pool.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${name}\` ${definition}`);
+    } catch (err) {
+      if (err.code !== "ER_DUP_FIELDNAME") throw err;
+    }
+  }
+}
+
 export async function initDb() {
   const admin = await mysql.createConnection({
     host: config.host,
@@ -64,7 +74,11 @@ export async function initDb() {
       name VARCHAR(512) NULL,
       category VARCHAR(512) NULL,
       title VARCHAR(512) NULL,
+      summary TEXT NULL,
+      description TEXT NULL,
       author VARCHAR(512) NULL,
+      tags VARCHAR(512) NULL,
+      extra_json JSON NULL,
       last_modified_by VARCHAR(512) NULL,
       subject VARCHAR(512) NULL,
       keywords TEXT NULL,
@@ -86,6 +100,13 @@ export async function initDb() {
       UNIQUE KEY uniq_document (document_id)
     )
   `);
+
+  await ensureColumns(pool, "extractions", [
+    ["summary", "TEXT NULL"],
+    ["description", "TEXT NULL"],
+    ["tags", "VARCHAR(512) NULL"],
+    ["extra_json", "JSON NULL"],
+  ]);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS extraction_images (

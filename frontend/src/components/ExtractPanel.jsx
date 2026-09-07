@@ -31,31 +31,23 @@ export default function ExtractPanel({ data, onClose, loading, error }) {
           <div className="extract-grid">
             <Field label="Name" value={data.name} />
             <Field label="Category" value={data.category} />
-            <Field label="Title" value={data.title} />
+            <Field label="Summary" value={data.summary} />
+            <Field label="Description" value={data.description} />
             <Field label="Author" value={data.author} />
-            <Field label="Subject" value={data.subject} />
-            <Field label="Keywords" value={data.keywords} />
-            <Field label="Created" value={data.created} />
-            <Field label="Modified" value={data.modified} />
-            <Field label="Words" value={data.word_count} />
+            <Field label="Tags" value={data.tags} />
           </div>
 
-          {data.emails?.length > 0 && (
+          {data.extra && Object.keys(data.extra).length > 0 && (
             <section>
-              <h3>Emails</h3>
-              <p>{data.emails.join(", ")}</p>
-            </section>
-          )}
-          {data.phones?.length > 0 && (
-            <section>
-              <h3>Phones</h3>
-              <p>{data.phones.join(", ")}</p>
-            </section>
-          )}
-          {data.dates?.length > 0 && (
-            <section>
-              <h3>Dates</h3>
-              <p>{data.dates.join(", ")}</p>
+              <h3>Other fields</h3>
+              <dl className="kv">
+                {Object.entries(data.extra).map(([k, v]) => (
+                  <div key={k}>
+                    <dt>{k}</dt>
+                    <dd>{String(v)}</dd>
+                  </div>
+                ))}
+              </dl>
             </section>
           )}
 
@@ -109,20 +101,6 @@ export default function ExtractPanel({ data, onClose, loading, error }) {
                 </div>
               </section>
             ))}
-
-          {data.key_values && Object.keys(data.key_values).length > 0 && (
-            <section>
-              <h3>Fields</h3>
-              <dl className="kv">
-                {Object.entries(data.key_values).map(([k, v]) => (
-                  <div key={k}>
-                    <dt>{k}</dt>
-                    <dd>{v}</dd>
-                  </div>
-                ))}
-              </dl>
-            </section>
-          )}
         </div>
       )}
     </aside>
