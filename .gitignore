@@ -1,0 +1,13 @@
+node_modules/
+dist/
+venv/
+.venv/
+__pycache__/
+*.pyc
+.env
+backend/data/
+backend/uploads/
+*.yjs
+.DS_Store
+Thumbs.db
+*.log

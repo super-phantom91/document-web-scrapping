@@ -1,0 +1,16 @@
+{
+  "name": "docusync",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Collaborative Word-like documents with DOCX extraction",
+  "scripts": {
+    "install:all": "npm install --prefix backend && npm install --prefix frontend",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:python": "python -m uvicorn main:app --reload --port 8000 --app-dir python-service --reload-dir python-service",
+    "dev": "concurrently -n python,node,react -c magenta,green,cyan \"npm run dev:python\" \"npm run dev:backend\" \"npm run dev:frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
