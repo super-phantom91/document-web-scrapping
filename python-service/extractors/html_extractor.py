@@ -7,7 +7,7 @@ from typing import Any
 
 from bs4 import BeautifulSoup
 
-from extractors.logic import consume_text_blocks, fill_heuristics
+from extractors.logic import consume_text_blocks, fill_from_full_text, fill_heuristics
 
 
 def extract_html(html: str, filename: str = "document") -> dict[str, Any]:
@@ -20,17 +20,17 @@ def extract_html(html: str, filename: str = "document") -> dict[str, Any]:
     tables: list[list[list[str]]] = []
 
     body = soup.body or soup
-    for node in body.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "p", "table"]):
-        if node.name == "p" and node.find_parent("table"):
+    for node in body.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "dt", "dd", "table"]):
+        if node.find_parent("table") and node.name != "table":
             continue
         if node.name in {"h1", "h2", "h3", "h4", "h5", "h6"}:
-            text = node.get_text(" ", strip=True)
+            text = node.get_text("\n", strip=True)
             if text:
                 level = int(node.name[1])
-                headings.append({"level": level, "text": text})
+                headings.append({"level": level, "text": text.split("\n", 1)[0]})
                 blocks.append(("heading", text))
-        elif node.name == "p":
-            text = node.get_text(" ", strip=True)
+        elif node.name in {"p", "li", "dt", "dd"}:
+            text = node.get_text("\n", strip=True)
             if text:
                 blocks.append(("p", text))
         elif node.name == "table":
@@ -51,6 +51,9 @@ def extract_html(html: str, filename: str = "document") -> dict[str, Any]:
 
     parsed: dict[str, Any] = {"extra": {}}
     consume_text_blocks(blocks, parsed)
+    paragraphs = [payload for kind, payload in blocks if kind in {"p", "heading"}]
+    table_lines = [" | ".join(cell for cell in row if cell) for table in tables for row in table]
+    fill_from_full_text(parsed, "\n".join(paragraphs + table_lines))
     fill_heuristics(parsed, filename)
 
     images: list[dict[str, Any]] = []
@@ -75,7 +78,6 @@ def extract_html(html: str, filename: str = "document") -> dict[str, Any]:
             }
         )
 
-    paragraphs = [payload for kind, payload in blocks if kind in {"p", "heading"}]
     full_text = "\n".join(paragraphs)
     parsed.update(
         {

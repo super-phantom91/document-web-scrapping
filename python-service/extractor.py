@@ -37,6 +37,8 @@ def merge_extractions(docx_data: dict[str, Any] | None, html_data: dict[str, Any
         merged["headings"] = docx_data["headings"]
     merged["extra"] = {**(html_data.get("extra") or {}), **(docx_data.get("extra") or {})}
     merged["key_values"] = {**(html_data.get("key_values") or {}), **(docx_data.get("key_values") or {})}
+    for key in ("emails", "phones", "dates"):
+        merged[key] = list(dict.fromkeys((docx_data.get(key) or []) + (html_data.get(key) or [])))
     merged["source"] = "docx+html"
     merged["filename"] = docx_data.get("filename") or html_data.get("filename")
     return merged
