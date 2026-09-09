@@ -22,10 +22,11 @@ import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import * as Y from "yjs";
-import { ArrowLeft, Database, ScanSearch, Share2 } from "lucide-react";
+import { ArrowLeft, Database, Printer, ScanSearch, Search, Share2 } from "lucide-react";
 import { api, getToken } from "../api.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { FontSize } from "../extensions/FontSize.js";
+import { ParagraphStyle } from "../extensions/ParagraphStyle.js";
 import Toolbar from "../components/Toolbar.jsx";
 import ExtractPanel from "../components/ExtractPanel.jsx";
 
@@ -42,6 +43,10 @@ export default function EditorPage() {
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState("");
   const [shareNote, setShareNote] = useState("");
+  const [zoom, setZoom] = useState(100);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const [findFrom, setFindFrom] = useState(0);
 
   const ydoc = useMemo(() => new Y.Doc(), [id]);
   const [provider, setProvider] = useState(null);
@@ -86,6 +91,7 @@ export default function EditorPage() {
         Highlight.configure({ multicolor: true }),
         FontFamily,
         FontSize,
+        ParagraphStyle,
         Subscript,
         Superscript,
         TextAlign.configure({ types: ["heading", "paragraph"] }),
@@ -108,7 +114,7 @@ export default function EditorPage() {
           : []),
       ],
       editorProps: {
-        attributes: { class: "page-editor" },
+        attributes: { class: "page-editor", spellcheck: "true" },
       },
     },
     [ydoc, provider, user]
@@ -182,15 +188,57 @@ export default function EditorPage() {
     setTimeout(() => setShareNote(""), 2500);
   }
 
+  function findNext(startAt = findFrom) {
+    if (!editor || !findQuery.trim()) return;
+    const needle = findQuery.toLowerCase();
+    let found = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (found || !node.isText) return;
+      const hay = node.text.toLowerCase();
+      let from = 0;
+      if (pos < startAt && pos + node.text.length > startAt) from = startAt - pos;
+      else if (pos < startAt) return;
+      const idx = hay.indexOf(needle, from);
+      if (idx >= 0) found = { from: pos + idx, to: pos + idx + findQuery.length };
+    });
+    if (!found && startAt > 0) {
+      setFindFrom(0);
+      findNext(0);
+      return;
+    }
+    if (found) {
+      editor.chain().focus().setTextSelection(found).run();
+      setFindFrom(found.to);
+    }
+  }
+
+  useEffect(() => {
+    function onKey(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        setFindOpen(true);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        window.print();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const words = editor?.storage.characterCount?.words?.() || 0;
+  const chars = editor?.storage.characterCount?.characters?.() || 0;
 
   return (
-    <div className="editor-shell">
-      <header className="editor-top">
-        <Link to="/" className="icon-btn" title="All documents">
+    <div className="editor-shell word-app">
+      <header className="editor-top word-titlebar">
+        <Link to="/" className="icon-btn light" title="All documents">
           <ArrowLeft size={18} />
         </Link>
+        <span className="word-mark" title="DocuSync">W</span>
         <input className="title-input" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <span className="word-ext">.docx</span>
         <div className="peer-row">
           {peers.map((peer, i) => (
             <span key={`${peer.name}-${i}`} className="avatar" style={{ background: peer.color }} title={peer.name}>
@@ -198,11 +246,17 @@ export default function EditorPage() {
             </span>
           ))}
         </div>
-        <button className="btn" onClick={share}>
+        <button className="btn ghost light" onClick={() => setFindOpen((open) => !open)} title="Find (Ctrl+F)">
+          <Search size={16} />
+        </button>
+        <button className="btn ghost light" onClick={() => window.print()} title="Print (Ctrl+P)">
+          <Printer size={16} />
+        </button>
+        <button className="btn ghost light" onClick={share}>
           <Share2 size={16} /> Share
         </button>
         {extraction && (
-          <button className="btn" onClick={() => setExtractOpen(true)} title="Open data saved in MySQL">
+          <button className="btn ghost light" onClick={() => setExtractOpen(true)} title="Open data saved in MySQL">
             <Database size={16} /> Saved
           </button>
         )}
@@ -210,11 +264,53 @@ export default function EditorPage() {
           <ScanSearch size={16} /> Extract
         </button>
       </header>
+      {findOpen && (
+        <form
+          className="find-bar"
+          onSubmit={(e) => {
+            e.preventDefault();
+            findNext();
+          }}
+        >
+          <Search size={14} />
+          <input
+            autoFocus
+            value={findQuery}
+            placeholder="Find in document"
+            onChange={(e) => {
+              setFindQuery(e.target.value);
+              setFindFrom(0);
+            }}
+          />
+          <button type="submit" className="btn">
+            Find next
+          </button>
+          <button type="button" className="icon-btn" onClick={() => setFindOpen(false)} title="Close">
+            ×
+          </button>
+        </form>
+      )}
       {shareNote && <div className="toast">{shareNote}</div>}
       <Toolbar editor={editor} />
       <div className="editor-body">
         <div className="page-wrap">
-          <div className="page">{editor ? <EditorContent editor={editor} /> : <div className="boot">Connecting…</div>}</div>
+          <div
+            className="page-stage"
+            style={{
+              transform: `scale(${zoom / 100})`,
+              height: `${Math.round((1076 * zoom) / 100)}px`,
+            }}
+          >
+            <div className="ruler" aria-hidden="true">
+              {Array.from({ length: 9 }, (_, inch) => (
+                <span key={inch} className="ruler-inch" style={{ left: `${inch * 96}px` }}>
+                  {inch}
+                  <i />
+                </span>
+              ))}
+            </div>
+            <div className="page">{editor ? <EditorContent editor={editor} /> : <div className="boot">Connecting…</div>}</div>
+          </div>
         </div>
         {extractOpen && (
           <ExtractPanel
@@ -225,9 +321,15 @@ export default function EditorPage() {
           />
         )}
       </div>
-      <footer className="status-bar">
+      <footer className="status-bar word-status">
+        <span>Page 1 of 1</span>
         <span>{words} words</span>
+        <span>{chars} characters</span>
         <span>{peers.length} editing</span>
+        <label className="zoom-control">
+          <span>{zoom}%</span>
+          <input type="range" min="75" max="150" step="5" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} />
+        </label>
       </footer>
     </div>
   );

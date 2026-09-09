@@ -14,6 +14,7 @@ import zipfile
 from typing import Any, Iterator
 from xml.etree import ElementTree as ET
 
+from extractors.field_patterns import looks_like_label, match_canonical_field
 from extractors.logic import consume_text_blocks, fill_from_full_text, fill_heuristics
 
 NS = {
@@ -72,7 +73,48 @@ def _paragraph_text(paragraph: ET.Element) -> str:
     text = "".join(parts)
     text = re.sub(r"[ \t]+\n", "\n", text)
     text = re.sub(r"\n[ \t]+", "\n", text)
-    return text.strip()
+    text = text.strip()
+    labeled = _labeled_line_from_runs(paragraph)
+    return labeled or text
+
+
+def _is_bold_run(run: ET.Element) -> bool:
+    props = run.find(_qn("w", "rPr"))
+    if props is None:
+        return False
+    bold = props.find(_qn("w", "b"))
+    if bold is None:
+        bold = props.find(_qn("w", "bCs"))
+    if bold is None:
+        return False
+    val = (bold.get(_qn("w", "val")) or "true").lower()
+    return val not in {"0", "false", "off"}
+
+
+def _labeled_line_from_runs(paragraph: ET.Element) -> str | None:
+    """Turn a bold label + plain value (common in Word forms) into 'Label: value'."""
+    runs: list[tuple[str, bool]] = []
+    for run in paragraph.iter(_qn("w", "r")):
+        text = "".join(node.text or "" for node in run.findall(_qn("w", "t")))
+        if not text:
+            continue
+        runs.append((text, _is_bold_run(run)))
+    if len(runs) < 2 or not runs[0][1]:
+        return None
+    index = 0
+    label_parts: list[str] = []
+    while index < len(runs) and runs[index][1]:
+        label_parts.append(runs[index][0])
+        index += 1
+    if index == 0 or index == len(runs):
+        return None
+    label = "".join(label_parts).strip(" \t:-–—=")
+    value = "".join(text for text, _ in runs[index:]).strip()
+    if not label or not value:
+        return None
+    if match_canonical_field(label) or looks_like_label(label):
+        return f"{label}: {value}"
+    return None
 
 
 def _heading_level(paragraph: ET.Element) -> int | None:
@@ -88,8 +130,10 @@ def _heading_level(paragraph: ET.Element) -> int | None:
     match = re.match(r"(?:Heading|heading|TITLE)(\d+)$", val)
     if match:
         return int(match.group(1))
-    if val.lower() in {"title", "heading"}:
+    if val.lower() in {"title", "heading", "titlechar"}:
         return 1
+    if val.lower() in {"subtitle", "subtitle2"}:
+        return 2
     return None
 
 

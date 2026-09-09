@@ -7,10 +7,14 @@ from pathlib import Path
 from typing import Any
 
 from extractors.field_patterns import (
+    BLOCK_FIELDS,
     KNOWN_FIELDS,
+    WEAK_HEADINGS,
     extract_contacts,
     is_mostly_empty,
+    is_plausible_value,
     longest_paragraph,
+    looks_like_field_line,
     looks_like_label,
     match_canonical_field,
     normalize_label,
@@ -18,12 +22,13 @@ from extractors.field_patterns import (
     parse_extra_inline,
     parse_inline_field,
     parse_label_only,
+    strip_list_prefix,
 )
 
 
 def apply_field(target: dict[str, Any], key: str, value: str) -> None:
     value = re.sub(r"\s+", " ", value).strip() if key not in {"summary", "description"} else value.strip()
-    if not value:
+    if not value or not is_plausible_value(key, value):
         return
     if key in KNOWN_FIELDS:
         if is_mostly_empty(target.get(key)):
@@ -117,6 +122,7 @@ def extract_from_table_cells(rows: list[list[str]], result: dict[str, Any]) -> N
 
 
 def _consume_line(text: str, result: dict[str, Any], pending_field: str | None) -> str | None:
+    text = strip_list_prefix(text)
     fields = parse_all_labeled_fields(text)
     if len(fields) > 1 or (len(fields) == 1 and (parse_inline_field(text) or parse_extra_inline(text) or ":" in text or "\t" in text)):
         for key, value in fields:
@@ -139,6 +145,8 @@ def _consume_line(text: str, result: dict[str, Any], pending_field: str | None) 
 
     if pending_field:
         apply_field(result, pending_field, text)
+        if pending_field in BLOCK_FIELDS:
+            return pending_field
         return None
 
     return pending_field
@@ -180,17 +188,21 @@ def consume_text_blocks(
         for line in lines:
             pending_field = _consume_line(line, result, pending_field)
 
-        if kind == "heading" and "_heading_name" not in result and not match_canonical_field(text):
-            result["_heading_name"] = text.split("\n", 1)[0].strip()
+        if kind == "heading" and "_heading_name" not in result:
+            heading = strip_list_prefix(text.split("\n", 1)[0])
+            if heading and not match_canonical_field(heading) and heading.lower() not in WEAK_HEADINGS:
+                result["_heading_name"] = heading
 
     if collect_paragraphs:
         result["_paragraphs"] = paragraphs
 
 
-def guess_name_from_filename(filename: str) -> str:
+def guess_name_from_filename(filename: str) -> str | None:
     stem = Path(filename).stem
     cleaned = re.sub(r"[_\-]+", " ", stem).strip()
-    return cleaned or stem
+    if not cleaned or cleaned.lower() in {"document", "untitled", "untitled document", "doc", "file"}:
+        return None
+    return cleaned
 
 
 def fill_from_full_text(result: dict[str, Any], text: str) -> None:
@@ -208,20 +220,25 @@ def fill_from_full_text(result: dict[str, Any], text: str) -> None:
 def fill_heuristics(result: dict[str, Any], filename: str, *, fallback_name: str | None = None) -> None:
     paragraphs: list[str] = result.pop("_paragraphs", [])
     heading_name = result.pop("_heading_name", None)
+    prose = [
+        p
+        for p in paragraphs
+        if not looks_like_field_line(p) and not match_canonical_field(strip_list_prefix(p))
+    ]
 
     if is_mostly_empty(result.get("name")):
         result["name"] = heading_name or fallback_name or guess_name_from_filename(filename)
 
     if is_mostly_empty(result.get("summary")):
-        mid = [p for p in paragraphs if 40 <= len(p) <= 400]
-        result["summary"] = mid[0] if mid else longest_paragraph(paragraphs)
+        mid = [p for p in prose if 40 <= len(p) <= 400]
+        result["summary"] = mid[0] if mid else longest_paragraph(prose)
 
     if is_mostly_empty(result.get("description")):
-        long_text = longest_paragraph(paragraphs, min_length=80)
+        long_text = longest_paragraph(prose, min_length=80)
         if long_text and long_text != result.get("summary"):
             result["description"] = long_text
-        elif len(paragraphs) > 1:
+        elif len(prose) > 1:
             used = {result.get("name"), result.get("summary")}
-            leftovers = [p for p in paragraphs if p not in used and len(p) > 20]
+            leftovers = [p for p in prose if p not in used and len(p) > 20]
             if leftovers:
                 result["description"] = "\n\n".join(leftovers[:5])

@@ -279,6 +279,59 @@ def test_html_mixed_layout():
     assert data["tags"] == "ops, notes"
 
 
+def test_bold_run_label():
+    body = (
+        "<w:p>"
+        "<w:r><w:rPr><w:b/></w:rPr><w:t>Name</w:t></w:r>"
+        "<w:r><w:t> Boldface Lamp</w:t></w:r>"
+        "</w:p>"
+        "<w:p>"
+        "<w:r><w:rPr><w:b/></w:rPr><w:t>Category</w:t></w:r>"
+        "<w:r><w:t> Lighting</w:t></w:r>"
+        "</w:p>"
+    )
+    data = extract_from_docx(_docx(body), "bold.docx")
+    assert data["name"] == "Boldface Lamp"
+    assert data["category"] == "Lighting"
+
+
+def test_numbered_label_and_multiline_description():
+    body = "".join(
+        [
+            _p("1. Name: Numbered Compass"),
+            _p("2. Type: Outdoor"),
+            _p("Details"),
+            _p("First paragraph of the long description for beginners on the trail."),
+            _p("Second paragraph continues the description with packing and weather notes."),
+        ]
+    )
+    data = extract_from_docx(_docx(body), "numbered.docx")
+    assert data["name"] == "Numbered Compass"
+    assert data["category"] == "Outdoor"
+    assert "First paragraph" in data["description"]
+    assert "Second paragraph" in data["description"]
+
+
+def test_heuristics_skip_labeled_lines():
+    body = "".join(
+        [
+            _p("Name: Quiet Kettle"),
+            _p("Category: Kitchen"),
+            _p("A mid-length unlabeled sentence used as the summary for this kettle."),
+        ]
+    )
+    data = extract_from_docx(_docx(body), "skip.docx")
+    assert data["name"] == "Quiet Kettle"
+    assert data["summary"] == "A mid-length unlabeled sentence used as the summary for this kettle."
+
+
+def test_html_bold_label():
+    html = "<p><strong>Name</strong> Harbor Mug</p><p><b>Category:</b> Kitchen</p>"
+    data = extract_from_html(html, "mug")
+    assert data["name"] == "Harbor Mug"
+    assert data["category"] == "Kitchen"
+
+
 if __name__ == "__main__":
     tests = [fn for name, fn in list(globals().items()) if name.startswith("test_") and callable(fn)]
     failed = 0

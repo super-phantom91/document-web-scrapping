@@ -18,20 +18,14 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "project name",
         "report title",
         "report name",
-        "product",
-        "item",
     ),
     "category": (
         "category",
         "type",
         "genre",
         "classification",
-        "group",
-        "section",
         "department",
         "topic",
-        "domain",
-        "kind",
         "product type",
         "document type",
     ),
@@ -44,7 +38,6 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "short description",
         "executive summary",
         "highlights",
-        "highlight",
         "tl;dr",
         "tldr",
     ),
@@ -52,8 +45,6 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "description",
         "details",
         "detail",
-        "content",
-        "body",
         "notes",
         "about",
         "information",
@@ -89,6 +80,26 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 KNOWN_FIELDS = tuple(FIELD_ALIASES.keys())
+BLOCK_FIELDS = {"summary", "description"}
+WEAK_HEADINGS = {
+    "introduction",
+    "conclusion",
+    "references",
+    "appendix",
+    "contents",
+    "table of contents",
+    "index",
+    "abstract",
+    "overview",
+    "summary",
+    "acknowledgements",
+    "acknowledgments",
+}
+
+_LIST_PREFIX = re.compile(
+    r"""^\s*(?:(?:[\(\[]?\d+[\)\].:-])|(?:[\(\[]?[ivxlcdm]+[\)\].:-])|[-*•●▪◦])\s+""",
+    re.IGNORECASE,
+)
 
 # Colon (but not ://), spaced dash/equals, pipe, or tab.
 _SEP = r"(?:\t+|\s*:(?!//)\s*|\s+[-–—=]\s+|\s*\|\s+)"
@@ -140,6 +151,10 @@ _EXTRA_LABELED = re.compile(
 )
 
 
+def strip_list_prefix(text: str) -> str:
+    return _LIST_PREFIX.sub("", (text or "").strip())
+
+
 def normalize_label(text: str) -> str:
     cleaned = re.sub(r"\s+", " ", text.strip().lower())
     return cleaned.rstrip(":-–—|= ")
@@ -167,6 +182,7 @@ def looks_like_label(text: str) -> bool:
 
 
 def parse_inline_field(line: str) -> tuple[str, str] | None:
+    line = strip_list_prefix(line)
     match = _INLINE.match(line) or _TAB_PAIR.match(line)
     if not match:
         return None
@@ -180,6 +196,7 @@ def parse_inline_field(line: str) -> tuple[str, str] | None:
 
 
 def parse_extra_inline(line: str) -> tuple[str, str] | None:
+    line = strip_list_prefix(line)
     match = _INLINE.match(line) or _TAB_PAIR.match(line)
     if not match:
         return None
@@ -206,7 +223,7 @@ def parse_all_labeled_fields(text: str) -> list[tuple[str, str]]:
         found.append((key, value))
         occupied.append(span)
 
-    for match in _KNOWN_LABELED.finditer(text or ""):
+    for match in _KNOWN_LABELED.finditer(strip_list_prefix(text or "")):
         canonical = match_canonical_field(match.group("label"))
         if canonical:
             _take(match, canonical)
@@ -227,6 +244,7 @@ def parse_all_labeled_fields(text: str) -> list[tuple[str, str]]:
 
 
 def parse_label_only(line: str, *, extra: bool = False) -> str | None:
+    line = strip_list_prefix(line)
     match = _LABEL_ONLY.match(line)
     if not match:
         return None
@@ -236,6 +254,30 @@ def parse_label_only(line: str, *, extra: bool = False) -> str | None:
     if extra and line.rstrip().endswith((":", "-", "–", "—", "=")):
         return normalize_label(match.group("label"))
     return None
+
+
+def looks_like_field_line(text: str) -> bool:
+    text = strip_list_prefix(text or "")
+    if parse_inline_field(text) or parse_extra_inline(text):
+        return True
+    return bool(parse_all_labeled_fields(text))
+
+
+def is_plausible_value(key: str, value: str) -> bool:
+    value = (value or "").strip()
+    if not value:
+        return False
+    if match_canonical_field(value) and key not in {"category", "tags"}:
+        return False
+    if key == "name":
+        return 1 <= len(value) <= 160 and value.count("\n") <= 2
+    if key == "author":
+        return 2 <= len(value) <= 80 and not _EMAIL.search(value) and len(value.split()) <= 8
+    if key == "category":
+        return 1 <= len(value) <= 80
+    if key == "tags":
+        return 1 <= len(value) <= 240
+    return True
 
 
 def is_mostly_empty(text: str | None) -> bool:

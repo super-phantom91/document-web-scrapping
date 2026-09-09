@@ -7,7 +7,43 @@ from typing import Any
 
 from bs4 import BeautifulSoup
 
+from extractors.field_patterns import looks_like_label, match_canonical_field
 from extractors.logic import consume_text_blocks, fill_from_full_text, fill_heuristics
+
+
+def _html_block_text(node) -> str:
+    first = None
+    for child in node.children:
+        name = getattr(child, "name", None)
+        if name in {"strong", "b"}:
+            first = child
+            break
+        if name == "span" and "bold" in (child.get("style") or "").lower():
+            first = child
+            break
+        if isinstance(child, str) and child.strip():
+            break
+        if name == "br":
+            continue
+    raw = node.get_text("\n", strip=True)
+    if first is None:
+        return raw
+    label = first.get_text(" ", strip=True).rstrip(":-–—=")
+    rest: list[str] = []
+    seen = False
+    for child in node.children:
+        if child is first:
+            seen = True
+            continue
+        if not seen:
+            continue
+        piece = child.get_text(" ", strip=True) if getattr(child, "get_text", None) else str(child).strip()
+        if piece:
+            rest.append(piece)
+    value = " ".join(rest).strip()
+    if label and value and (match_canonical_field(label) or looks_like_label(label)):
+        return f"{label}: {value}"
+    return raw
 
 
 def extract_html(html: str, filename: str = "document") -> dict[str, Any]:
@@ -20,17 +56,17 @@ def extract_html(html: str, filename: str = "document") -> dict[str, Any]:
     tables: list[list[list[str]]] = []
 
     body = soup.body or soup
-    for node in body.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "dt", "dd", "table"]):
+    for node in body.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "dt", "dd", "blockquote", "table"]):
         if node.find_parent("table") and node.name != "table":
             continue
         if node.name in {"h1", "h2", "h3", "h4", "h5", "h6"}:
-            text = node.get_text("\n", strip=True)
+            text = _html_block_text(node)
             if text:
                 level = int(node.name[1])
                 headings.append({"level": level, "text": text.split("\n", 1)[0]})
                 blocks.append(("heading", text))
-        elif node.name in {"p", "li", "dt", "dd"}:
-            text = node.get_text("\n", strip=True)
+        elif node.name in {"p", "li", "dt", "dd", "blockquote"}:
+            text = _html_block_text(node)
             if text:
                 blocks.append(("p", text))
         elif node.name == "table":
