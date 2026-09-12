@@ -10,6 +10,7 @@ from extractors.field_patterns import (
     BLOCK_FIELDS,
     KNOWN_FIELDS,
     WEAK_HEADINGS,
+    clean_value,
     extract_contacts,
     is_mostly_empty,
     is_plausible_value,
@@ -23,22 +24,29 @@ from extractors.field_patterns import (
     parse_inline_field,
     parse_label_only,
     strip_list_prefix,
+    value_quality,
 )
 
 
 def apply_field(target: dict[str, Any], key: str, value: str) -> None:
-    value = re.sub(r"\s+", " ", value).strip() if key not in {"summary", "description"} else value.strip()
+    value = value.strip() if key in {"summary", "description"} else clean_value(value)
     if not value or not is_plausible_value(key, value):
         return
+    quality = value_quality(key, value)
+    scores = target.setdefault("_quality", {})
     if key in KNOWN_FIELDS:
-        if is_mostly_empty(target.get(key)):
+        current = target.get(key)
+        if is_mostly_empty(current) or quality >= scores.get(key, 0) + 4:
             target[key] = value
-        elif key in {"summary", "description"} and value not in str(target.get(key)):
-            target[key] = f"{target[key]}\n\n{value}".strip()
+            scores[key] = quality
+        elif key in {"summary", "description"} and value not in str(current):
+            target[key] = f"{current}\n\n{value}".strip()
+            scores[key] = max(scores.get(key, 0), quality)
         return
     extra = target.setdefault("extra", {})
-    if key not in extra:
-        extra[key] = value
+    extra_key = normalize_label(key)
+    if extra_key not in extra:
+        extra[extra_key] = value
 
 
 def _apply_cell_pair(result: dict[str, Any], left: str, right: str) -> bool:
@@ -88,10 +96,23 @@ def extract_from_table_cells(rows: list[list[str]], result: dict[str, Any]) -> N
     if _extract_header_row_table(rows, result):
         return
 
+    pending: str | None = None
     for cells in rows:
         cells = [c.strip() for c in cells]
         if not cells:
             continue
+
+        nonempty = [c for c in cells if c]
+        if pending and nonempty and not match_canonical_field(nonempty[0]) and not parse_label_only(nonempty[0], extra=True):
+            apply_field(result, pending, " ".join(nonempty))
+            pending = None
+            continue
+
+        if len(nonempty) == 1 and "\n" in nonempty[0]:
+            first, _, rest = nonempty[0].partition("\n")
+            if _apply_cell_pair(result, first.strip(), rest.strip()):
+                pending = None
+                continue
 
         i = 0
         paired = False
@@ -102,23 +123,29 @@ def extract_from_table_cells(rows: list[list[str]], result: dict[str, Any]) -> N
                 continue
             i += 1
         if paired:
+            pending = None
             continue
 
-        for cell in cells:
-            if not cell:
-                continue
+        for cell in nonempty:
             fields = parse_all_labeled_fields(cell)
             if fields:
                 for key, value in fields:
                     apply_field(result, key, value)
+                pending = None
                 continue
             inline = parse_inline_field(cell)
             if inline:
                 apply_field(result, inline[0], inline[1])
+                pending = None
                 continue
             extra_inline = parse_extra_inline(cell)
             if extra_inline:
                 apply_field(result, extra_inline[0], extra_inline[1])
+                pending = None
+                continue
+            label = parse_label_only(cell, extra=True)
+            if label:
+                pending = label
 
 
 def _consume_line(text: str, result: dict[str, Any], pending_field: str | None) -> str | None:
@@ -242,3 +269,4 @@ def fill_heuristics(result: dict[str, Any], filename: str, *, fallback_name: str
             leftovers = [p for p in prose if p not in used and len(p) > 20]
             if leftovers:
                 result["description"] = "\n\n".join(leftovers[:5])
+    result.pop("_quality", None)

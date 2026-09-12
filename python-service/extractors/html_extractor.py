@@ -18,9 +18,11 @@ def _html_block_text(node) -> str:
         if name in {"strong", "b"}:
             first = child
             break
-        if name == "span" and "bold" in (child.get("style") or "").lower():
-            first = child
-            break
+        if name == "span":
+            style = (child.get("style") or "").lower()
+            if "bold" in style or "font-weight:700" in style.replace(" ", "") or "font-weight:bold" in style.replace(" ", ""):
+                first = child
+                break
         if isinstance(child, str) and child.strip():
             break
         if name == "br":

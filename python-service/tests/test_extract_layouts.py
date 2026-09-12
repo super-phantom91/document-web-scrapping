@@ -64,7 +64,7 @@ def _textbox(inner: str) -> str:
     )
 
 
-def _docx(body: str, *, header: str = "", core: str = "") -> bytes:
+def _docx(body: str, *, header: str = "", core: str = "", styles: str = "", custom: str = "") -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         zf.writestr(
@@ -80,6 +80,10 @@ def _docx(body: str, *, header: str = "", core: str = "") -> bytes:
             )
         if core:
             zf.writestr("docProps/core.xml", core)
+        if styles:
+            zf.writestr("word/styles.xml", styles)
+        if custom:
+            zf.writestr("docProps/custom.xml", custom)
         zf.writestr("word/media/photo.png", b"\x89PNG\r\n\x1a\n" + b"\x00" * 24)
     return buf.getvalue()
 
@@ -330,6 +334,57 @@ def test_html_bold_label():
     data = extract_from_html(html, "mug")
     assert data["name"] == "Harbor Mug"
     assert data["category"] == "Kitchen"
+
+
+def test_required_and_fullwidth_labels():
+    body = "".join(
+        [
+            _p("Name (required): Hinted Compass"),
+            _p("Category*：Outdoor"),
+            _p("Author **:  Jordan Lee"),
+        ]
+    )
+    data = extract_from_docx(_docx(body), "hints.docx")
+    assert data["name"] == "Hinted Compass"
+    assert data["category"] == "Outdoor"
+    assert data["author"] == "Jordan Lee"
+
+
+def test_stacked_table_and_cell_newline():
+    body = _table([["Name"], ["Stacked Lantern"]]) + _table([["Category\nCamping"]])
+    data = extract_from_docx(_docx(body), "stack.docx")
+    assert data["name"] == "Stacked Lantern"
+    assert data["category"] == "Camping"
+
+
+def test_paragraph_style_named_field():
+    styles = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<w:styles xmlns:w="{W}">'
+        '<w:style w:styleId="ProductName"><w:name w:val="Product Name"/></w:style>'
+        '<w:style w:styleId="DocType"><w:name w:val="Category"/></w:style>'
+        "</w:styles>"
+    )
+    body = (
+        '<w:p><w:pPr><w:pStyle w:val="ProductName"/></w:pPr>'
+        "<w:r><w:t>Styled Beacon</w:t></w:r></w:p>"
+        '<w:p><w:pPr><w:pStyle w:val="DocType"/></w:pPr>'
+        "<w:r><w:t>Safety</w:t></w:r></w:p>"
+    )
+    data = extract_from_docx(_docx(body, styles=styles), "styled.docx")
+    assert data["name"] == "Styled Beacon"
+    assert data["category"] == "Safety"
+
+
+def test_weak_title_overwritten_by_real_name():
+    body = "".join(
+        [
+            _p("Product Sheet", heading=1),
+            _p("Name: Real Aurora Lamp"),
+        ]
+    )
+    data = extract_from_docx(_docx(body), "weak.docx")
+    assert data["name"] == "Real Aurora Lamp"
 
 
 if __name__ == "__main__":

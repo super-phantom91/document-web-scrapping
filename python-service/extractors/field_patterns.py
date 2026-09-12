@@ -100,19 +100,21 @@ _LIST_PREFIX = re.compile(
     r"""^\s*(?:(?:[\(\[]?\d+[\)\].:-])|(?:[\(\[]?[ivxlcdm]+[\)\].:-])|[-*•●▪◦])\s+""",
     re.IGNORECASE,
 )
+_TRAILING_HINT = re.compile(r"(?:\s*[\*＊]+\s*|\s*\([^)]*\)\s*|\s*\[[^\]]*\]\s*)+$")
 
-# Colon (but not ://), spaced dash/equals, pipe, or tab.
-_SEP = r"(?:\t+|\s*:(?!//)\s*|\s+[-–—=]\s+|\s*\|\s+)"
+# Colon (including fullwidth), spaced dash/equals, pipe, or tab.
+_SEP = r"(?:\t+|\s*[:：](?!//)\s*|\s+[-–—=]\s+|\s*\|\s*)"
+_LABEL_HINT = r"(?:\s*[\*＊]+|\s*\([^)]*\)|\s*\[[^\]]*\])*"
 
 _LABEL = r"[A-Za-z][A-Za-z0-9 &\-/]{1,40}?"
 
 _LABEL_ONLY = re.compile(
-    rf"^\s*(?P<label>{_LABEL})\s*[:\-–—|]?\s*$",
+    rf"^\s*(?P<label>{_LABEL}){_LABEL_HINT}\s*[:：\-–—|]?\s*$",
     re.IGNORECASE,
 )
 
 _INLINE = re.compile(
-    rf"^\s*(?P<label>{_LABEL})\s*{_SEP}(?P<value>.+?)\s*$",
+    rf"^\s*(?P<label>{_LABEL}){_LABEL_HINT}\s*{_SEP}(?P<value>.+?)\s*$",
     re.IGNORECASE,
 )
 
@@ -143,7 +145,7 @@ def _alias_alternation() -> str:
 
 _ALIAS_ALT = _alias_alternation()
 _KNOWN_LABELED = re.compile(
-    rf"(?i)(?:^|(?<=[\s;|/]))(?P<label>{_ALIAS_ALT})\s*{_SEP}(?P<value>.+?)(?=\s+(?:{_ALIAS_ALT})\s*{_SEP}|$)"
+    rf"(?i)(?:^|(?<=[\s;|/；]))(?P<label>{_ALIAS_ALT}){_LABEL_HINT}\s*{_SEP}(?P<value>.+?)(?=\s+(?:{_ALIAS_ALT}){_LABEL_HINT}\s*{_SEP}|$)"
 )
 _EXTRA_LABELED = re.compile(
     r"(?i)(?:^|(?<=\s))(?P<label>[A-Za-z][A-Za-z0-9_\-/]{1,24})\s*:\s+(?P<value>.+?)"
@@ -152,12 +154,17 @@ _EXTRA_LABELED = re.compile(
 
 
 def strip_list_prefix(text: str) -> str:
-    return _LIST_PREFIX.sub("", (text or "").strip())
+    text = (text or "").replace("\u00a0", " ").replace("\u202f", " ")
+    return _LIST_PREFIX.sub("", text.strip())
+
+
+def peel_label(text: str) -> str:
+    return _TRAILING_HINT.sub("", strip_list_prefix(text)).strip()
 
 
 def normalize_label(text: str) -> str:
-    cleaned = re.sub(r"\s+", " ", text.strip().lower())
-    return cleaned.rstrip(":-–—|= ")
+    cleaned = re.sub(r"\s+", " ", peel_label(text).lower())
+    return cleaned.rstrip(":-–—|=?？： ")
 
 
 def match_canonical_field(label: str) -> str | None:
@@ -168,8 +175,15 @@ def match_canonical_field(label: str) -> str | None:
     return None
 
 
+def clean_value(value: str) -> str:
+    value = (value or "").replace("\u00a0", " ").replace("\u202f", " ")
+    value = value.strip(" \t;|")
+    value = re.sub(r"^[:：\-–—=]+\s*", "", value)
+    return re.sub(r"[ \t]+", " ", value).strip()
+
+
 def looks_like_label(text: str) -> bool:
-    text = text.strip()
+    text = peel_label(text)
     if not text or len(text) > 48:
         return False
     if match_canonical_field(text):
@@ -189,7 +203,7 @@ def parse_inline_field(line: str) -> tuple[str, str] | None:
     canonical = match_canonical_field(match.group("label"))
     if not canonical:
         return None
-    value = match.group("value").strip()
+    value = clean_value(match.group("value"))
     if not value:
         return None
     return canonical, value
@@ -202,7 +216,7 @@ def parse_extra_inline(line: str) -> tuple[str, str] | None:
         return None
     if match_canonical_field(match.group("label")):
         return None
-    value = match.group("value").strip()
+    value = clean_value(match.group("value"))
     if not value:
         return None
     return normalize_label(match.group("label")), value
@@ -214,7 +228,7 @@ def parse_all_labeled_fields(text: str) -> list[tuple[str, str]]:
     occupied: list[tuple[int, int]] = []
 
     def _take(match: re.Match[str], key: str) -> None:
-        value = match.group("value").strip(" \t;|")
+        value = clean_value(match.group("value"))
         if not value:
             return
         span = match.span()
@@ -278,6 +292,33 @@ def is_plausible_value(key: str, value: str) -> bool:
     if key == "tags":
         return 1 <= len(value) <= 240
     return True
+
+
+def value_quality(key: str, value: str) -> int:
+    value = (value or "").strip()
+    if not is_plausible_value(key, value):
+        return 0
+    words = value.split()
+    lowered = value.lower()
+    if key == "name":
+        if value.isdigit() or len(value) < 3:
+            return 3
+        if lowered in WEAK_HEADINGS or lowered in {"product sheet", "inventory record", "fact sheet", "cover page"}:
+            return 6
+        if 2 <= len(words) <= 8 and sum(c.isalpha() for c in value) >= 6:
+            return 22
+        if 8 <= len(value) <= 80:
+            return 16
+        return 12
+    if key == "author":
+        if 2 <= len(words) <= 4:
+            return 20
+        return 12
+    if key == "category":
+        return 18 if 1 <= len(words) <= 6 else 10
+    if key in {"summary", "description"}:
+        return 14 if len(value) >= 40 else 10
+    return 10
 
 
 def is_mostly_empty(text: str | None) -> bool:

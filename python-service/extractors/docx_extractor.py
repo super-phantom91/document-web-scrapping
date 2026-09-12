@@ -15,7 +15,7 @@ from typing import Any, Iterator
 from xml.etree import ElementTree as ET
 
 from extractors.field_patterns import looks_like_label, match_canonical_field
-from extractors.logic import consume_text_blocks, fill_from_full_text, fill_heuristics
+from extractors.logic import apply_field, consume_text_blocks, fill_from_full_text, fill_heuristics
 
 NS = {
     "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
@@ -85,10 +85,21 @@ def _is_bold_run(run: ET.Element) -> bool:
     bold = props.find(_qn("w", "b"))
     if bold is None:
         bold = props.find(_qn("w", "bCs"))
-    if bold is None:
-        return False
-    val = (bold.get(_qn("w", "val")) or "true").lower()
-    return val not in {"0", "false", "off"}
+    if bold is not None:
+        val = (bold.get(_qn("w", "val")) or "true").lower()
+        if val not in {"0", "false", "off"}:
+            return True
+    underline = props.find(_qn("w", "u"))
+    if underline is not None:
+        val = (underline.get(_qn("w", "val")) or "single").lower()
+        if val not in {"none", "0"}:
+            return True
+    style = props.find(_qn("w", "rStyle"))
+    if style is not None:
+        sid = (style.get(_qn("w", "val")) or "").lower()
+        if sid in {"strong", "bold", "intenseemphasis", "emphasis"}:
+            return True
+    return False
 
 
 def _labeled_line_from_runs(paragraph: ET.Element) -> str | None:
@@ -234,6 +245,51 @@ def _walk_blocks(parent: ET.Element) -> Iterator[tuple[str, Any]]:
             yield from _walk_blocks(child)
 
 
+def _load_style_map(zf: zipfile.ZipFile) -> dict[str, str]:
+    if "word/styles.xml" not in zf.namelist():
+        return {}
+    root = _parse_xml(zf.read("word/styles.xml"))
+    if root is None:
+        return {}
+    mapping: dict[str, str] = {}
+    for style in root.iter(_qn("w", "style")):
+        style_id = style.get(_qn("w", "styleId")) or ""
+        name_el = style.find(_qn("w", "name"))
+        name = (name_el.get(_qn("w", "val")) if name_el is not None else "") or style_id
+        if style_id:
+            mapping[style_id] = name
+    return mapping
+
+
+def _paragraph_style_field(paragraph: ET.Element, style_map: dict[str, str]) -> str | None:
+    style = paragraph.find(f".//{_qn('w', 'pStyle')}")
+    if style is None:
+        return None
+    style_id = style.get(_qn("w", "val")) or ""
+    name = style_map.get(style_id, style_id)
+    spaced = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name).replace("_", " ")
+    if re.match(r"(?i)heading\s*\d+$", spaced.strip()):
+        return None
+    return match_canonical_field(spaced)
+
+
+def _custom_properties(zf: zipfile.ZipFile) -> dict[str, str]:
+    if "docProps/custom.xml" not in zf.namelist():
+        return {}
+    root = _parse_xml(zf.read("docProps/custom.xml"))
+    if root is None:
+        return {}
+    found: dict[str, str] = {}
+    for prop in root:
+        name = (prop.get("name") or "").strip()
+        if not name:
+            continue
+        text = " ".join(prop.itertext()).strip()
+        if text:
+            found[name] = text
+    return found
+
+
 def _core_properties(zf: zipfile.ZipFile) -> dict[str, str | None]:
     if "docProps/core.xml" not in zf.namelist():
         return {}
@@ -289,7 +345,9 @@ def _element_to_blocks(
     tables: list[list[list[str]]],
     *,
     collect_headings: bool,
+    style_map: dict[str, str] | None = None,
 ) -> list[tuple[str, Any]]:
+    style_map = style_map or {}
     blocks: list[tuple[str, Any]] = []
     seen_tables: set[int] = set()
     for kind, payload in _walk_blocks(element):
@@ -310,6 +368,9 @@ def _element_to_blocks(
         text = _paragraph_text(paragraph)
         if not text:
             continue
+        style_field = _paragraph_style_field(paragraph, style_map)
+        if style_field and not match_canonical_field(text.split("\n", 1)[0]):
+            blocks.append(("sdt", (style_field, text)))
         level = _heading_level(paragraph) if collect_headings else None
         if level:
             headings.append({"level": level, "text": text.split("\n", 1)[0]})
@@ -379,6 +440,7 @@ def extract_docx_bytes(file_bytes: bytes, filename: str = "document.docx") -> di
         raise ValueError("File is not a valid .docx (ZIP) package.") from exc
 
     props = _core_properties(zf)
+    style_map = _load_style_map(zf)
     headings: list[dict[str, Any]] = []
     tables: list[list[list[str]]] = []
     blocks: list[tuple[str, Any]] = []
@@ -388,7 +450,7 @@ def extract_docx_bytes(file_bytes: bytes, filename: str = "document.docx") -> di
         root = _xml_root(zf, "word/document.xml")
         body = None if root is None else root.find("w:body", NS)
         if body is not None:
-            blocks.extend(_element_to_blocks(body, headings, tables, collect_headings=True))
+            blocks.extend(_element_to_blocks(body, headings, tables, collect_headings=True, style_map=style_map))
 
     for name in sorted(zf.namelist()):
         lower = name.replace("\\", "/").lower()
@@ -399,12 +461,16 @@ def extract_docx_bytes(file_bytes: bytes, filename: str = "document.docx") -> di
         root = _xml_root(zf, name)
         if root is None:
             continue
-        header_blocks.extend(_element_to_blocks(root, headings, tables, collect_headings=False))
+        header_blocks.extend(_element_to_blocks(root, headings, tables, collect_headings=False, style_map=style_map))
 
     parsed: dict[str, Any] = {"extra": {}}
     consume_text_blocks(blocks, parsed)
     if header_blocks:
         consume_text_blocks(header_blocks, parsed, collect_paragraphs=False)
+
+    for label, value in _custom_properties(zf).items():
+        key = match_canonical_field(label) or label
+        apply_field(parsed, key, value)
 
     paragraphs = [payload for kind, payload in blocks if kind in {"p", "heading"}]
     table_lines: list[str] = []
