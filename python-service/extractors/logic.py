@@ -13,15 +13,12 @@ from extractors.field_patterns import (
     clean_value,
     extract_contacts,
     is_mostly_empty,
-    is_plausible_value,
     longest_paragraph,
     looks_like_field_line,
     looks_like_label,
     match_canonical_field,
     normalize_label,
     parse_all_labeled_fields,
-    parse_extra_inline,
-    parse_inline_field,
     parse_label_only,
     strip_list_prefix,
     value_quality,
@@ -30,9 +27,11 @@ from extractors.field_patterns import (
 
 def apply_field(target: dict[str, Any], key: str, value: str) -> None:
     value = value.strip() if key in {"summary", "description"} else clean_value(value)
-    if not value or not is_plausible_value(key, value):
+    if not value:
         return
     quality = value_quality(key, value)
+    if not quality:
+        return
     scores = target.setdefault("_quality", {})
     if key in KNOWN_FIELDS:
         current = target.get(key)
@@ -55,10 +54,6 @@ def _apply_cell_pair(result: dict[str, Any], left: str, right: str) -> bool:
     canonical = match_canonical_field(left)
     if canonical:
         apply_field(result, canonical, right)
-        return True
-    inline = parse_inline_field(f"{left}: {right}")
-    if inline:
-        apply_field(result, inline[0], inline[1])
         return True
     labeled = parse_all_labeled_fields(f"{left}: {right}")
     if labeled:
@@ -133,16 +128,6 @@ def extract_from_table_cells(rows: list[list[str]], result: dict[str, Any]) -> N
                     apply_field(result, key, value)
                 pending = None
                 continue
-            inline = parse_inline_field(cell)
-            if inline:
-                apply_field(result, inline[0], inline[1])
-                pending = None
-                continue
-            extra_inline = parse_extra_inline(cell)
-            if extra_inline:
-                apply_field(result, extra_inline[0], extra_inline[1])
-                pending = None
-                continue
             label = parse_label_only(cell, extra=True)
             if label:
                 pending = label
@@ -151,19 +136,9 @@ def extract_from_table_cells(rows: list[list[str]], result: dict[str, Any]) -> N
 def _consume_line(text: str, result: dict[str, Any], pending_field: str | None) -> str | None:
     text = strip_list_prefix(text)
     fields = parse_all_labeled_fields(text)
-    if len(fields) > 1 or (len(fields) == 1 and (parse_inline_field(text) or parse_extra_inline(text) or ":" in text or "\t" in text)):
+    if fields:
         for key, value in fields:
             apply_field(result, key, value)
-        return None
-
-    inline = parse_inline_field(text)
-    if inline:
-        apply_field(result, inline[0], inline[1])
-        return None
-
-    extra_inline = parse_extra_inline(text)
-    if extra_inline:
-        apply_field(result, extra_inline[0], extra_inline[1])
         return None
 
     label = parse_label_only(text, extra=True)

@@ -118,11 +118,6 @@ _INLINE = re.compile(
     re.IGNORECASE,
 )
 
-_TAB_PAIR = re.compile(
-    rf"^\s*(?P<label>{_LABEL})\s*\t+\s*(?P<value>.+?)\s*$",
-    re.IGNORECASE,
-)
-
 _EMAIL = re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")
 _PHONE = re.compile(
     r"\b(?:\+?\d{1,3}[\s.\-])?(?:\(?\d{3}\)?[\s.\-])\d{3}[\s.\-]\d{4}\b"
@@ -135,15 +130,10 @@ _DATE = re.compile(
 )
 
 
-def _alias_alternation() -> str:
-    aliases: list[str] = []
-    for variants in FIELD_ALIASES.values():
-        aliases.extend(variants)
-    unique = sorted(set(aliases), key=len, reverse=True)
-    return "|".join(re.escape(a) for a in unique)
-
-
-_ALIAS_ALT = _alias_alternation()
+_ALIAS_ALT = "|".join(
+    re.escape(alias)
+    for alias in sorted({a for variants in FIELD_ALIASES.values() for a in variants}, key=len, reverse=True)
+)
 _KNOWN_LABELED = re.compile(
     rf"(?i)(?:^|(?<=[\s;|/；]))(?P<label>{_ALIAS_ALT}){_LABEL_HINT}\s*{_SEP}(?P<value>.+?)(?=\s+(?:{_ALIAS_ALT}){_LABEL_HINT}\s*{_SEP}|$)"
 )
@@ -195,31 +185,16 @@ def looks_like_label(text: str) -> bool:
     return bool(_LABEL_ONLY.match(text))
 
 
-def parse_inline_field(line: str) -> tuple[str, str] | None:
+def parse_labeled_line(line: str) -> tuple[str, str] | None:
     line = strip_list_prefix(line)
-    match = _INLINE.match(line) or _TAB_PAIR.match(line)
+    match = _INLINE.match(line)
     if not match:
-        return None
-    canonical = match_canonical_field(match.group("label"))
-    if not canonical:
         return None
     value = clean_value(match.group("value"))
     if not value:
         return None
-    return canonical, value
-
-
-def parse_extra_inline(line: str) -> tuple[str, str] | None:
-    line = strip_list_prefix(line)
-    match = _INLINE.match(line) or _TAB_PAIR.match(line)
-    if not match:
-        return None
-    if match_canonical_field(match.group("label")):
-        return None
-    value = clean_value(match.group("value"))
-    if not value:
-        return None
-    return normalize_label(match.group("label")), value
+    key = match_canonical_field(match.group("label")) or normalize_label(match.group("label"))
+    return key, value
 
 
 def parse_all_labeled_fields(text: str) -> list[tuple[str, str]]:
@@ -243,12 +218,9 @@ def parse_all_labeled_fields(text: str) -> list[tuple[str, str]]:
             _take(match, canonical)
 
     if not found:
-        inline = parse_inline_field(text)
-        if inline:
-            return [inline]
-        extra = parse_extra_inline(text)
-        if extra:
-            return [extra]
+        single = parse_labeled_line(text)
+        if single:
+            return [single]
         for match in _EXTRA_LABELED.finditer(text or ""):
             label = match.group("label")
             if match_canonical_field(label):
@@ -271,9 +243,6 @@ def parse_label_only(line: str, *, extra: bool = False) -> str | None:
 
 
 def looks_like_field_line(text: str) -> bool:
-    text = strip_list_prefix(text or "")
-    if parse_inline_field(text) or parse_extra_inline(text):
-        return True
     return bool(parse_all_labeled_fields(text))
 
 

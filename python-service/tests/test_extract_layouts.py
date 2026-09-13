@@ -64,7 +64,7 @@ def _textbox(inner: str) -> str:
     )
 
 
-def _docx(body: str, *, header: str = "", core: str = "", styles: str = "", custom: str = "") -> bytes:
+def _docx(body: str, *, header: str = "", core: str = "", styles: str = "") -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         zf.writestr(
@@ -82,8 +82,6 @@ def _docx(body: str, *, header: str = "", core: str = "", styles: str = "", cust
             zf.writestr("docProps/core.xml", core)
         if styles:
             zf.writestr("word/styles.xml", styles)
-        if custom:
-            zf.writestr("docProps/custom.xml", custom)
         zf.writestr("word/media/photo.png", b"\x89PNG\r\n\x1a\n" + b"\x00" * 24)
     return buf.getvalue()
 

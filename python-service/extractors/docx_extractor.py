@@ -29,8 +29,6 @@ W_TBL = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tbl"
 W_SDT = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}sdt"
 W_SDT_CONTENT = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}sdtContent"
 W_TXBX = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}txbxContent"
-W_HYPERLINK = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hyperlink"
-W_INS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}ins"
 W_DEL = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}del"
 
 
@@ -44,10 +42,6 @@ def _text(el: ET.Element | None) -> str:
     return el.text.strip()
 
 
-def _local(tag: str) -> str:
-    return tag.rsplit("}", 1)[-1]
-
-
 def _paragraph_text(paragraph: ET.Element) -> str:
     """Collect visible text, including tabs and line breaks, skipping nested tables/text boxes."""
     parts: list[str] = []
@@ -56,7 +50,7 @@ def _paragraph_text(paragraph: ET.Element) -> str:
         tag = node.tag
         if node is not paragraph and tag in {W_TBL, W_TXBX}:
             return
-        if tag == _qn("w", "del"):
+        if tag == W_DEL:
             return
         if tag == _qn("w", "t") and node.text:
             parts.append(node.text)
@@ -235,12 +229,6 @@ def _walk_blocks(parent: ET.Element) -> Iterator[tuple[str, Any]]:
                 yield from _walk_blocks(content)
             else:
                 yield from _walk_blocks(child)
-        elif tag == W_TXBX:
-            yield from _walk_blocks(child)
-        elif tag in {W_HYPERLINK, W_INS, W_SDT_CONTENT}:
-            yield from _walk_blocks(child)
-        elif _local(tag) in {"sdt", "txbxContent", "body", "hdr", "ftr", "footnote", "endnote"}:
-            yield from _walk_blocks(child)
         elif list(child):
             yield from _walk_blocks(child)
 
