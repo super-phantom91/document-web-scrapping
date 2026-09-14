@@ -9,10 +9,11 @@ from typing import Any
 from extractors.field_patterns import (
     BLOCK_FIELDS,
     KNOWN_FIELDS,
-    WEAK_HEADINGS,
     clean_value,
     extract_contacts,
     is_mostly_empty,
+    is_untitled_filename,
+    is_weak_heading,
     longest_paragraph,
     looks_like_field_line,
     looks_like_label,
@@ -192,7 +193,7 @@ def consume_text_blocks(
 
         if kind == "heading" and "_heading_name" not in result:
             heading = strip_list_prefix(text.split("\n", 1)[0])
-            if heading and not match_canonical_field(heading) and heading.lower() not in WEAK_HEADINGS:
+            if heading and not match_canonical_field(heading) and not is_weak_heading(heading):
                 result["_heading_name"] = heading
 
     if collect_paragraphs:
@@ -202,7 +203,7 @@ def consume_text_blocks(
 def guess_name_from_filename(filename: str) -> str | None:
     stem = Path(filename).stem
     cleaned = re.sub(r"[_\-]+", " ", stem).strip()
-    if not cleaned or cleaned.lower() in {"document", "untitled", "untitled document", "doc", "file"}:
+    if not cleaned or is_untitled_filename(cleaned):
         return None
     return cleaned
 

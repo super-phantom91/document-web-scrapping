@@ -385,6 +385,84 @@ def test_weak_title_overwritten_by_real_name():
     assert data["name"] == "Real Aurora Lamp"
 
 
+def test_spanish_and_french_labels():
+    body = "".join(
+        [
+            _p("Nombre: Lámpara Aurora"),
+            _p("Categoría: Hogar"),
+            _p("Autor: Ana García"),
+            _p("Resumen: Lámpara LED compacta con brillo ajustable para escritorio."),
+            _p("Descripción: Incluye tres niveles de intensidad y un puerto USB."),
+            _p("Palabras clave: lámpara, led"),
+        ]
+    )
+    data = extract_from_docx(_docx(body), "es.docx")
+    assert data["name"] == "Lámpara Aurora"
+    assert data["category"] == "Hogar"
+    assert data["author"] == "Ana García"
+    assert "brillo ajustable" in data["summary"]
+    assert "puerto USB" in data["description"]
+    assert "lámpara" in data["tags"]
+
+    html = "<p>Nom: Lampe Nord</p><p>Catégorie: Maison</p><p>Auteur: Camélia Dupont</p>"
+    fr = extract_from_html(html, "fr")
+    assert fr["name"] == "Lampe Nord"
+    assert fr["category"] == "Maison"
+    assert fr["author"] == "Camélia Dupont"
+
+
+def test_cjk_arabic_cyrillic_and_vietnamese():
+    body = "".join(
+        [
+            _p("名称：北极台灯类别：家居作者：李明"),
+            _p("摘要：可调亮度的小型LED台灯，适合夜间阅读。"),
+            _p("说明：灯臂可弯曲，底座带USB充电口。"),
+            _p("标签：台灯, LED"),
+            _p("编号：ZH-01"),
+        ]
+    )
+    zh = extract_from_docx(_docx(body), "zh.docx")
+    assert zh["name"] == "北极台灯"
+    assert zh["category"] == "家居"
+    assert zh["author"] == "李明"
+    assert "夜间阅读" in zh["summary"]
+    assert "USB" in zh["description"]
+    assert "台灯" in zh["tags"]
+    assert zh["extra"].get("编号") == "ZH-01"
+
+    ja = extract_from_docx(
+        _docx(_p("タイトル: 北風ランプ") + _p("カテゴリ: 照明") + _p("著者: 山田太郎")),
+        "ja.docx",
+    )
+    assert ja["name"] == "北風ランプ"
+    assert ja["category"] == "照明"
+    assert ja["author"] == "山田太郎"
+
+    ar = extract_from_docx(
+        _docx(_p("الاسم: مصباح الشمال") + _p("الفئة: منزل") + _p("المؤلف: ليلى حسن")),
+        "ar.docx",
+    )
+    assert ar["name"] == "مصباح الشمال"
+    assert ar["category"] == "منزل"
+    assert ar["author"] == "ليلى حسن"
+
+    ru = extract_from_docx(
+        _docx(_p("Название: Северная лампа") + _p("Категория: Дом") + _p("Автор: Иван Петров")),
+        "ru.docx",
+    )
+    assert ru["name"] == "Северная лампа"
+    assert ru["category"] == "Дом"
+    assert ru["author"] == "Иван Петров"
+
+    vi = extract_from_docx(
+        _docx(_p("Tên: Đèn Aurora") + _p("Danh mục: Gia dụng") + _p("Tác giả: Nguyễn An")),
+        "vi.docx",
+    )
+    assert vi["name"] == "Đèn Aurora"
+    assert vi["category"] == "Gia dụng"
+    assert vi["author"] == "Nguyễn An"
+
+
 if __name__ == "__main__":
     tests = [fn for name, fn in list(globals().items()) if name.startswith("test_") and callable(fn)]
     failed = 0
