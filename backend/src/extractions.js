@@ -80,10 +80,38 @@ export async function getExtraction(documentId) {
   return rowToExtraction(rows[0], images);
 }
 
+function scrapSnapshot(data) {
+  return {
+    name: data.name || null,
+    category: data.category || null,
+    title: data.title || null,
+    summary: data.summary || null,
+    description: data.description || null,
+    author: data.author || null,
+    tags: data.tags || null,
+    extra: data.extra || {},
+    emails: data.emails || [],
+    phones: data.phones || [],
+    dates: data.dates || [],
+    headings: data.headings || [],
+    tables: data.tables || [],
+    key_values: data.key_values || {},
+    source: data.source || null,
+    filename: data.filename || null,
+    images: (data.images || []).map((img) => ({
+      name: img.name || null,
+      content_type: img.content_type || null,
+      size_bytes: img.size_bytes ?? null,
+      src: img.src || null,
+    })),
+  };
+}
+
 export async function saveExtraction(documentId, data) {
   const pool = getPool();
   const conn = await pool.getConnection();
   const extractionId = uuid();
+  const snapshot = scrapSnapshot(data);
   try {
     await conn.beginTransaction();
     await conn.execute("DELETE FROM extractions WHERE document_id = ?", [documentId]);
@@ -92,35 +120,36 @@ export async function saveExtraction(documentId, data) {
         id, document_id, name, category, title, summary, description, author, tags, extra_json,
         last_modified_by, subject, keywords,
         created_at_doc, modified_at_doc, source, filename, word_count, character_count,
-        headings, paragraphs, tables_json, key_values, emails, phones, dates
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        headings, paragraphs, tables_json, key_values, emails, phones, dates, scraped_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         extractionId,
         documentId,
-        data.name || null,
-        data.category || null,
-        data.title || null,
-        data.summary || null,
-        data.description || null,
-        data.author || null,
-        data.tags || null,
-        jsonValue(data.extra || {}),
+        snapshot.name,
+        snapshot.category,
+        snapshot.title,
+        snapshot.summary,
+        snapshot.description,
+        snapshot.author,
+        snapshot.tags,
+        jsonValue(snapshot.extra),
         data.last_modified_by || null,
         data.subject || null,
         data.keywords || null,
         data.created || null,
         data.modified || null,
-        data.source || null,
-        data.filename || null,
+        snapshot.source,
+        snapshot.filename,
         data.word_count ?? null,
         data.character_count ?? null,
-        jsonValue(data.headings || []),
+        jsonValue(snapshot.headings),
         jsonValue(data.paragraphs || []),
-        jsonValue(data.tables || []),
-        jsonValue(data.key_values || {}),
-        jsonValue(data.emails || []),
-        jsonValue(data.phones || []),
-        jsonValue(data.dates || []),
+        jsonValue(snapshot.tables),
+        jsonValue(snapshot.key_values),
+        jsonValue(snapshot.emails),
+        jsonValue(snapshot.phones),
+        jsonValue(snapshot.dates),
+        jsonValue(snapshot),
       ]
     );
 
@@ -152,7 +181,11 @@ export async function saveExtraction(documentId, data) {
   } finally {
     conn.release();
   }
-  return getExtraction(documentId);
+  const stored = await getExtraction(documentId);
+  if (!stored) {
+    throw new Error("MySQL did not keep the scraped row.");
+  }
+  return stored;
 }
 
 export async function deleteExtraction(documentId) {

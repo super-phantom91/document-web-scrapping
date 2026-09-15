@@ -6,8 +6,36 @@ from typing import Any
 
 from extractors.docx_extractor import extract_docx_bytes
 from extractors.html_extractor import extract_html
+from extractors.scraping import (
+    necessary_information,
+    scrap_author,
+    scrap_category,
+    scrap_contacts,
+    scrap_description,
+    scrap_fields_from_text,
+    scrap_name,
+    scrap_summary,
+    scrap_tags,
+)
 
 KNOWN = ("name", "category", "summary", "description", "author", "tags")
+
+__all__ = [
+    "KNOWN",
+    "extract_from_docx",
+    "extract_from_html",
+    "merge_extractions",
+    "necessary_information",
+    "scrap_author",
+    "scrap_category",
+    "scrap_contacts",
+    "scrap_description",
+    "scrap_document",
+    "scrap_fields_from_text",
+    "scrap_name",
+    "scrap_summary",
+    "scrap_tags",
+]
 
 
 def extract_from_docx(file_bytes: bytes, filename: str = "document.docx") -> dict[str, Any]:
@@ -42,3 +70,15 @@ def merge_extractions(docx_data: dict[str, Any] | None, html_data: dict[str, Any
     merged["source"] = "docx+html"
     merged["filename"] = docx_data.get("filename") or html_data.get("filename")
     return merged
+
+
+def scrap_document(
+    *,
+    html: str | None = None,
+    docx_bytes: bytes | None = None,
+    filename: str = "document",
+) -> dict[str, Any]:
+    """Scrap a Word file, editor HTML, or both."""
+    docx_data = extract_from_docx(docx_bytes, filename) if docx_bytes else None
+    html_data = extract_from_html(html, filename) if html else None
+    return merge_extractions(docx_data, html_data)

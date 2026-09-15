@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -22,19 +22,23 @@ import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import * as Y from "yjs";
-import { ArrowLeft, Database, Printer, ScanSearch, Search, Share2 } from "lucide-react";
+import { Redo2, Save, ScanSearch, Search, Share2, Undo2 } from "lucide-react";
 import { api, getToken } from "../api.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { FontSize } from "../extensions/FontSize.js";
 import { ParagraphStyle } from "../extensions/ParagraphStyle.js";
 import Toolbar from "../components/Toolbar.jsx";
 import ExtractPanel from "../components/ExtractPanel.jsx";
+import FileBackstage from "../components/FileBackstage.jsx";
+import NavPane from "../components/NavPane.jsx";
 
 const COLLAB_URL = import.meta.env.VITE_COLLAB_URL || "ws://localhost:1234";
 
 export default function EditorPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
+  const fileRef = useRef(null);
   const [meta, setMeta] = useState(null);
   const [title, setTitle] = useState("");
   const [peers, setPeers] = useState([]);
@@ -42,11 +46,23 @@ export default function EditorPage() {
   const [extraction, setExtraction] = useState(null);
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState("");
+  const [mysqlInfo, setMysqlInfo] = useState(null);
   const [shareNote, setShareNote] = useState("");
   const [zoom, setZoom] = useState(100);
   const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState("");
   const [findFrom, setFindFrom] = useState(0);
+  const [tab, setTab] = useState("home");
+  const [fileOpen, setFileOpen] = useState(false);
+  const [fileSection, setFileSection] = useState("info");
+  const [documents, setDocuments] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [fileError, setFileError] = useState("");
+  const [dropActive, setDropActive] = useState(false);
+  const [showNav, setShowNav] = useState(false);
+  const [showRuler, setShowRuler] = useState(true);
+  const [viewMode, setViewMode] = useState("print");
+  const [margins, setMargins] = useState("normal");
 
   const ydoc = useMemo(() => new Y.Doc(), [id]);
   const [provider, setProvider] = useState(null);
@@ -62,7 +78,9 @@ export default function EditorPage() {
       .catch((err) => setExtractError(err.message));
     api(`/documents/${id}/extraction`)
       .then((data) => {
-        if (!cancelled && data.extraction) setExtraction(data.extraction);
+        if (cancelled) return;
+        if (data.extraction) setExtraction(data.extraction);
+        if (data.mysql) setMysqlInfo(data.mysql);
       })
       .catch(() => {});
     return () => {
@@ -101,7 +119,7 @@ export default function EditorPage() {
         TableRow,
         TableHeader,
         TableCell,
-        Placeholder.configure({ placeholder: "Start typing, or import a Word document from the home page…" }),
+        Placeholder.configure({ placeholder: "Start typing, or open a Word document from File → Open…" }),
         CharacterCount,
         Collaboration.configure({ document: ydoc }),
         ...(provider
@@ -114,11 +132,20 @@ export default function EditorPage() {
           : []),
       ],
       editorProps: {
-        attributes: { class: "page-editor", spellcheck: "true" },
+        attributes: { class: "page-editor margin-normal" },
       },
     },
     [ydoc, provider, user]
   );
+
+  useEffect(() => {
+    if (!editor) return;
+    editor.setOptions({
+      editorProps: {
+        attributes: { class: `page-editor margin-${margins}` },
+      },
+    });
+  }, [editor, margins]);
 
   useEffect(() => {
     if (!editor || !provider || !meta) return;
@@ -170,6 +197,7 @@ export default function EditorPage() {
         body: JSON.stringify({ html: editor.getHTML() }),
       });
       setExtraction(data.extraction);
+      setMysqlInfo(data.mysql || null);
     } catch (err) {
       setExtractError(err.message);
     } finally {
@@ -186,6 +214,65 @@ export default function EditorPage() {
       setShareNote(url);
     }
     setTimeout(() => setShareNote(""), 2500);
+  }
+
+  function saveToast() {
+    setShareNote("All changes saved automatically.");
+    setTimeout(() => setShareNote(""), 2000);
+  }
+
+  async function openFileMenu() {
+    setFileSection("info");
+    setFileOpen(true);
+    setFileError("");
+    try {
+      const data = await api("/documents");
+      setDocuments(data.documents);
+    } catch {
+      setDocuments([]);
+    }
+  }
+
+  async function createDoc() {
+    setBusy(true);
+    setFileError("");
+    try {
+      const data = await api("/documents", {
+        method: "POST",
+        body: JSON.stringify({ title: "Document" }),
+      });
+      setFileOpen(false);
+      navigate(`/d/${data.document.id}`);
+    } catch (err) {
+      setFileError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function importDocx(file) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".docx")) {
+      setFileError("Only .docx Word documents can be opened.");
+      setFileOpen(true);
+      setFileSection("open");
+      return;
+    }
+    setBusy(true);
+    setFileError("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const data = await api("/documents/import", { method: "POST", body: form });
+      setFileOpen(false);
+      navigate(`/d/${data.document.id}`);
+    } catch (err) {
+      setFileError(err.message);
+      setFileOpen(true);
+      setFileSection("open");
+    } finally {
+      setBusy(false);
+    }
   }
 
   function findNext(startAt = findFrom) {
@@ -214,13 +301,27 @@ export default function EditorPage() {
 
   useEffect(() => {
     function onKey(e) {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const key = e.key.toLowerCase();
+      if (key === "f") {
         e.preventDefault();
+        setFileOpen(false);
         setFindOpen(true);
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
+      if (key === "p") {
         e.preventDefault();
         window.print();
+      }
+      if (key === "o") {
+        e.preventDefault();
+        setFileOpen(true);
+        setFileSection("open");
+        fileRef.current?.click();
+      }
+      if (key === "s") {
+        e.preventDefault();
+        setShareNote("All changes saved automatically.");
+        setTimeout(() => setShareNote(""), 2000);
       }
     }
     window.addEventListener("keydown", onKey);
@@ -231,14 +332,55 @@ export default function EditorPage() {
   const chars = editor?.storage.characterCount?.characters?.() || 0;
 
   return (
-    <div className="editor-shell word-app">
+    <div
+      className="editor-shell word-app"
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDropActive(true);
+      }}
+      onDragLeave={() => setDropActive(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDropActive(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file) importDocx(file);
+      }}
+    >
       <header className="editor-top word-titlebar">
-        <Link to="/" className="icon-btn light" title="All documents">
-          <ArrowLeft size={18} />
-        </Link>
-        <span className="word-mark" title="DocuSync">W</span>
+        <span className="word-mark" title="Word">
+          W
+        </span>
+        <div className="qat">
+          <button type="button" className="qat-btn" title="Save (Ctrl+S)" onClick={saveToast}>
+            <Save size={14} />
+          </button>
+          <button type="button" className="qat-btn" title="Undo" onClick={() => editor?.chain().focus().undo().run()}>
+            <Undo2 size={14} />
+          </button>
+          <button type="button" className="qat-btn" title="Redo" onClick={() => editor?.chain().focus().redo().run()}>
+            <Redo2 size={14} />
+          </button>
+        </div>
         <input className="title-input" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <span className="word-ext">.docx</span>
+        <span className="word-ext">.docx - Word</span>
+        <span className="autosave">Autosave On</span>
+        <label className="tell-me">
+          <Search size={14} />
+          <input
+            placeholder="Tell me what you want to do"
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              const q = e.target.value.toLowerCase();
+              if (q.includes("find")) setFindOpen(true);
+              else if (q.includes("print")) window.print();
+              else if (q.includes("open")) {
+                openFileMenu();
+                setFileSection("open");
+              } else if (q.includes("extract") || q.includes("insight") || q.includes("scrap")) extract();
+              else setFindQuery(e.target.value);
+            }}
+          />
+        </label>
         <div className="peer-row">
           {peers.map((peer, i) => (
             <span key={`${peer.name}-${i}`} className="avatar" style={{ background: peer.color }} title={peer.name}>
@@ -246,91 +388,145 @@ export default function EditorPage() {
             </span>
           ))}
         </div>
-        <button className="btn ghost light" onClick={() => setFindOpen((open) => !open)} title="Find (Ctrl+F)">
-          <Search size={16} />
-        </button>
-        <button className="btn ghost light" onClick={() => window.print()} title="Print (Ctrl+P)">
-          <Printer size={16} />
-        </button>
         <button className="btn ghost light" onClick={share}>
           <Share2 size={16} /> Share
         </button>
-        {extraction && (
-          <button className="btn ghost light" onClick={() => setExtractOpen(true)} title="Open data saved in MySQL">
-            <Database size={16} /> Saved
-          </button>
-        )}
-        <button className="btn primary" onClick={extract}>
-          <ScanSearch size={16} /> Extract
+        <button className="btn primary" onClick={extract} title="Scrap name, category, and other fields">
+          <ScanSearch size={16} /> Scrap
         </button>
       </header>
-      {findOpen && (
-        <form
-          className="find-bar"
-          onSubmit={(e) => {
-            e.preventDefault();
-            findNext();
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          importDocx(file);
+        }}
+      />
+      {fileOpen ? (
+        <FileBackstage
+          section={fileSection}
+          onSection={setFileSection}
+          documents={documents}
+          current={meta}
+          busy={busy}
+          error={fileError}
+          onBack={() => setFileOpen(false)}
+          onNew={createDoc}
+          onOpenComputer={() => fileRef.current?.click()}
+          onOpenDocument={(docId) => {
+            setFileOpen(false);
+            if (docId !== id) navigate(`/d/${docId}`);
           }}
-        >
-          <Search size={14} />
-          <input
-            autoFocus
-            value={findQuery}
-            placeholder="Find in document"
-            onChange={(e) => {
-              setFindQuery(e.target.value);
-              setFindFrom(0);
-            }}
+          onPrint={() => window.print()}
+          onShare={share}
+          onClose={() => navigate("/")}
+        />
+      ) : (
+        <>
+          {findOpen && (
+            <form
+              className="find-bar"
+              onSubmit={(e) => {
+                e.preventDefault();
+                findNext();
+              }}
+            >
+              <Search size={14} />
+              <input
+                autoFocus
+                value={findQuery}
+                placeholder="Find in document"
+                onChange={(e) => {
+                  setFindQuery(e.target.value);
+                  setFindFrom(0);
+                }}
+              />
+              <button type="submit" className="btn">
+                Find next
+              </button>
+              <button type="button" className="icon-btn" onClick={() => setFindOpen(false)} title="Close">
+                ×
+              </button>
+            </form>
+          )}
+          {shareNote && <div className="toast">{shareNote}</div>}
+          <Toolbar
+            editor={editor}
+            tab={tab}
+            onTab={setTab}
+            onFile={openFileMenu}
+            zoom={zoom}
+            onZoom={setZoom}
+            viewMode={viewMode}
+            onViewMode={setViewMode}
+            showRuler={showRuler}
+            onToggleRuler={() => setShowRuler((v) => !v)}
+            showNav={showNav}
+            onToggleNav={() => setShowNav((v) => !v)}
+            margins={margins}
+            onMargins={setMargins}
+            onFind={() => setFindOpen(true)}
+            onExtract={extract}
+            onPrint={() => window.print()}
           />
-          <button type="submit" className="btn">
-            Find next
-          </button>
-          <button type="button" className="icon-btn" onClick={() => setFindOpen(false)} title="Close">
-            ×
-          </button>
-        </form>
-      )}
-      {shareNote && <div className="toast">{shareNote}</div>}
-      <Toolbar editor={editor} />
-      <div className="editor-body">
-        <div className="page-wrap">
-          <div
-            className="page-stage"
-            style={{
-              transform: `scale(${zoom / 100})`,
-              height: `${Math.round((1076 * zoom) / 100)}px`,
-            }}
-          >
-            <div className="ruler" aria-hidden="true">
-              {Array.from({ length: 9 }, (_, inch) => (
-                <span key={inch} className="ruler-inch" style={{ left: `${inch * 96}px` }}>
-                  {inch}
-                  <i />
-                </span>
-              ))}
+          <div className="editor-body">
+            {showNav && <NavPane editor={editor} onClose={() => setShowNav(false)} />}
+            <div className={`page-wrap ${viewMode}`}>
+              <div
+                className="page-stage"
+                style={
+                  viewMode === "print"
+                    ? {
+                        transform: `scale(${zoom / 100})`,
+                        height: `${Math.round((1076 * zoom) / 100)}px`,
+                      }
+                    : undefined
+                }
+              >
+                {showRuler && viewMode === "print" && (
+                  <div className="ruler" aria-hidden="true">
+                    {Array.from({ length: 9 }, (_, inch) => (
+                      <span key={inch} className="ruler-inch" style={{ left: `${inch * 96}px` }}>
+                        {inch}
+                        <i />
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className={`page ${viewMode}`}>
+                  {editor ? <EditorContent editor={editor} /> : <div className="boot">Connecting…</div>}
+                </div>
+              </div>
             </div>
-            <div className="page">{editor ? <EditorContent editor={editor} /> : <div className="boot">Connecting…</div>}</div>
+            {extractOpen && (
+              <ExtractPanel
+                data={extraction}
+                loading={extracting}
+                error={extractError}
+                onScrap={extract}
+                mysql={mysqlInfo}
+                onClose={() => setExtractOpen(false)}
+              />
+            )}
           </div>
-        </div>
-        {extractOpen && (
-          <ExtractPanel
-            data={extraction}
-            loading={extracting}
-            error={extractError}
-            onClose={() => setExtractOpen(false)}
-          />
-        )}
-      </div>
-      <footer className="status-bar word-status">
-        <span>Page 1 of 1</span>
-        <span>{words} words</span>
-        <span>{chars} characters</span>
-        <span>{peers.length} editing</span>
-        <label className="zoom-control">
-          <span>{zoom}%</span>
-          <input type="range" min="75" max="150" step="5" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} />
-        </label>
-      </footer>
+          <footer className="status-bar word-status">
+            <span>Page 1 of 1</span>
+            <span>{words} words</span>
+            <span>{chars} characters</span>
+            <span>English (United States)</span>
+            <span>{peers.length} editing</span>
+            <label className="zoom-control">
+              <span>{zoom}%</span>
+              <input type="range" min="75" max="150" step="5" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} />
+            </label>
+          </footer>
+        </>
+      )}
+      {dropActive && <div className="drop-overlay">Drop a Word document (.docx) to open it</div>}
     </div>
   );
 }

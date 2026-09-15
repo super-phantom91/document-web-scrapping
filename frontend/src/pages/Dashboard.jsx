@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FilePlus, FileUp, LogOut, Trash2 } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { api } from "../api.js";
 import { useAuth } from "../context/AuthContext.jsx";
 
@@ -19,6 +19,8 @@ export default function Dashboard() {
   const [documents, setDocuments] = useState([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [dropActive, setDropActive] = useState(false);
+  const [section, setSection] = useState("home");
 
   async function refresh() {
     const data = await api("/documents");
@@ -34,7 +36,7 @@ export default function Dashboard() {
     try {
       const data = await api("/documents", {
         method: "POST",
-        body: JSON.stringify({ title: "Untitled document" }),
+        body: JSON.stringify({ title: "Document" }),
       });
       navigate(`/d/${data.document.id}`);
     } catch (err) {
@@ -44,9 +46,7 @@ export default function Dashboard() {
     }
   }
 
-  async function importDocx(e) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
+  async function importDocx(file) {
     if (!file) return;
     setBusy(true);
     setError("");
@@ -62,6 +62,12 @@ export default function Dashboard() {
     }
   }
 
+  async function onFileChange(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    await importDocx(file);
+  }
+
   async function remove(id) {
     if (!confirm("Delete this document?")) return;
     try {
@@ -73,70 +79,144 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="dash">
-      <header className="dash-top">
-        <div className="brand-inline">
-          <span className="brand-mark sm">DS</span>
-          <strong>DocuSync</strong>
-        </div>
+    <div
+      className="word-start"
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDropActive(true);
+      }}
+      onDragLeave={() => setDropActive(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDropActive(false);
+        importDocx(e.dataTransfer.files?.[0]);
+      }}
+    >
+      <header className="word-titlebar start-titlebar">
+        <span className="word-mark">W</span>
+        <strong className="word-product">Word</strong>
         <div className="dash-user">
           <span className="avatar" style={{ background: user.color }}>
             {user.username.slice(0, 1).toUpperCase()}
           </span>
           <span>{user.username}</span>
-          <button className="btn ghost" onClick={logout}>
+          <button className="btn ghost light" onClick={logout}>
             <LogOut size={16} /> Sign out
           </button>
         </div>
       </header>
 
-      <section className="dash-hero">
-        <div>
-          <h1>Documents</h1>
-          <p>Create a blank page, import a Word file, and edit it with your team.</p>
-        </div>
-        <div className="dash-actions">
-          <button className="btn primary" onClick={createDoc} disabled={busy}>
-            <FilePlus size={16} /> Blank document
+      <div className="start-body">
+        <nav className="start-nav">
+          <button type="button" className={section === "home" ? "active" : ""} onClick={() => setSection("home")}>
+            Home
           </button>
-          <button className="btn" onClick={() => fileRef.current?.click()} disabled={busy}>
-            <FileUp size={16} /> Import DOCX
+          <button type="button" className={section === "new" ? "active" : ""} onClick={() => setSection("new")}>
+            New
           </button>
-          <input ref={fileRef} type="file" accept=".docx" hidden onChange={importDocx} />
-        </div>
-      </section>
+          <button type="button" className={section === "open" ? "active" : ""} onClick={() => setSection("open")}>
+            Open
+          </button>
+        </nav>
 
-      {error && <div className="form-error">{error}</div>}
+        <main className="start-main">
+          {error && <div className="form-error">{error}</div>}
+          {busy && <p className="muted">Opening Word document…</p>}
 
-      {documents.length === 0 ? (
-        <div className="empty">No documents yet. Create one or import a .docx file.</div>
-      ) : (
-        <div className="doc-grid">
-          {documents.map((doc) => (
-            <article key={doc.id} className="doc-card" onClick={() => navigate(`/d/${doc.id}`)}>
-              <div className="doc-preview">{doc.title.slice(0, 1).toUpperCase()}</div>
-              <div className="doc-meta">
-                <h3>{doc.title}</h3>
-                <p>
-                  {doc.ownerName} · {formatDate(doc.updatedAt)}
-                </p>
-              </div>
-              {doc.ownerId === user.id && (
-                <button
-                  className="icon-btn danger"
-                  title="Delete"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    remove(doc.id);
-                  }}
-                >
-                  <Trash2 size={16} />
+          {section === "home" && (
+            <>
+              <h1>Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}</h1>
+              <div className="template-row">
+                <button type="button" className="template-card" onClick={createDoc} disabled={busy}>
+                  <span className="template-page" />
+                  <strong>Blank document</strong>
                 </button>
+                <button type="button" className="template-card" onClick={() => fileRef.current?.click()} disabled={busy}>
+                  <span className="template-page open" />
+                  <strong>Open</strong>
+                </button>
+              </div>
+              <h2>Recent</h2>
+              {documents.length === 0 ? (
+                <p className="muted">Open a Word document from this computer, or start a blank page.</p>
+              ) : (
+                <ul className="recent-list">
+                  {documents.map((doc) => (
+                    <li key={doc.id}>
+                      <button type="button" onClick={() => navigate(`/d/${doc.id}`)}>
+                        <span className="doc-preview">W</span>
+                        <span>
+                          <strong>{doc.title}.docx</strong>
+                          <em>
+                            {doc.ownerName} · {formatDate(doc.updatedAt)}
+                          </em>
+                        </span>
+                      </button>
+                      {doc.ownerId === user.id && (
+                        <button
+                          type="button"
+                          className="icon-btn danger"
+                          title="Delete"
+                          onClick={() => remove(doc.id)}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               )}
-            </article>
-          ))}
-        </div>
-      )}
+            </>
+          )}
+
+          {section === "new" && (
+            <>
+              <h1>New</h1>
+              <div className="template-row">
+                <button type="button" className="template-card" onClick={createDoc} disabled={busy}>
+                  <span className="template-page" />
+                  <strong>Blank document</strong>
+                  <em>Letter · 8.5" × 11"</em>
+                </button>
+              </div>
+            </>
+          )}
+
+          {section === "open" && (
+            <>
+              <h1>Open</h1>
+              <button type="button" className="btn primary" onClick={() => fileRef.current?.click()} disabled={busy}>
+                Browse
+              </button>
+              <p className="muted">Open a Microsoft Word .docx file in this browser.</p>
+              <h2>Recent</h2>
+              <ul className="recent-list">
+                {documents.map((doc) => (
+                  <li key={doc.id}>
+                    <button type="button" onClick={() => navigate(`/d/${doc.id}`)}>
+                      <span className="doc-preview">W</span>
+                      <span>
+                        <strong>{doc.title}.docx</strong>
+                        <em>
+                          {doc.ownerName} · {formatDate(doc.updatedAt)}
+                        </em>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </main>
+      </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        hidden
+        onChange={onFileChange}
+      />
+      {dropActive && <div className="drop-overlay">Drop a Word document (.docx) to open it</div>}
     </div>
   );
 }

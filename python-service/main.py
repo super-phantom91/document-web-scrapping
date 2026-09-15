@@ -1,7 +1,7 @@
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from extractor import extract_from_docx, extract_from_html, merge_extractions
+from extractor import scrap_document
 
 app = FastAPI(title="DocuSync Extractor", version="1.0.0")
 
@@ -28,8 +28,8 @@ async def extract(
     if not file and not html:
         raise HTTPException(status_code=400, detail="Provide a DOCX file and/or HTML content.")
 
-    docx_data = None
-    html_data = None
+    payload = None
+    name = filename or "document"
 
     if file is not None:
         name = file.filename or filename or "document.docx"
@@ -38,12 +38,8 @@ async def extract(
         payload = await file.read()
         if not payload:
             raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-        try:
-            docx_data = extract_from_docx(payload, name)
-        except Exception as exc:
-            raise HTTPException(status_code=422, detail=f"Could not parse DOCX: {exc}") from exc
 
-    if html:
-        html_data = extract_from_html(html, filename or (file.filename if file else "document"))
-
-    return merge_extractions(docx_data, html_data)
+    try:
+        return scrap_document(html=html, docx_bytes=payload, filename=name)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Could not scrap document: {exc}") from exc

@@ -5,7 +5,9 @@ import {
   AlignLeft,
   AlignRight,
   Bold,
+  ClipboardPaste,
   Columns3,
+  Copy,
   Eraser,
   Highlighter,
   ImagePlus,
@@ -17,8 +19,12 @@ import {
   Minus,
   Outdent,
   Plus,
+  Printer,
   Redo2,
   Rows3,
+  Scissors,
+  Search,
+  ScanSearch,
   Strikethrough,
   Subscript,
   Superscript,
@@ -47,6 +53,14 @@ const LINE_HEIGHTS = [
   { label: "1.15", value: "1.15" },
   { label: "1.5", value: "1.5" },
   { label: "2.0", value: "2" },
+];
+const TABS = [
+  { id: "file", label: "File" },
+  { id: "home", label: "Home" },
+  { id: "insert", label: "Insert" },
+  { id: "layout", label: "Layout" },
+  { id: "review", label: "Review" },
+  { id: "view", label: "View" },
 ];
 
 function Tool({ active, onClick, title, children, disabled, wide }) {
@@ -78,9 +92,32 @@ function applyStyle(editor, value) {
   else editor.chain().focus().toggleHeading({ level: Number(value.slice(1)) }).run();
 }
 
-export default function Toolbar({ editor }) {
+function bumpFont(editor, size, dir) {
+  const index = SIZES.indexOf(size);
+  const next = SIZES[Math.min(SIZES.length - 1, Math.max(0, (index < 0 ? 4 : index) + dir))];
+  editor.chain().focus().setFontSize(next).run();
+}
+
+export default function Toolbar({
+  editor,
+  tab,
+  onTab,
+  onFile,
+  zoom,
+  onZoom,
+  viewMode,
+  onViewMode,
+  showRuler,
+  onToggleRuler,
+  showNav,
+  onToggleNav,
+  margins,
+  onMargins,
+  onFind,
+  onExtract,
+  onPrint,
+}) {
   const [, setTick] = useState(0);
-  const [tab, setTab] = useState("home");
 
   useEffect(() => {
     if (!editor) return undefined;
@@ -121,24 +158,34 @@ export default function Toolbar({ editor }) {
     editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
   }
 
+  async function paste() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) editor.chain().focus().insertContent(text.replace(/\n/g, "<br>")).run();
+    } catch {
+      editor.chain().focus().run();
+    }
+  }
+
   const inTable = editor.isActive("table");
   const font = editor.getAttributes("textStyle").fontFamily || "Calibri";
   const size = editor.getAttributes("textStyle").fontSize || "11pt";
   const lineHeight =
     editor.getAttributes("paragraph").lineHeight || editor.getAttributes("heading").lineHeight || "1.15";
+  const style = currentStyle(editor);
 
   return (
     <div className="word-ribbon">
       <div className="ribbon-tabs" role="tablist">
-        {["home", "insert", "layout"].map((id) => (
+        {TABS.map((item) => (
           <button
-            key={id}
+            key={item.id}
             type="button"
             role="tab"
-            className={`ribbon-tab ${tab === id ? "active" : ""}`}
-            onClick={() => setTab(id)}
+            className={`ribbon-tab ${item.id === "file" ? "file" : ""} ${tab === item.id ? "active" : ""}`}
+            onClick={() => (item.id === "file" ? onFile() : onTab(item.id))}
           >
-            {id[0].toUpperCase() + id.slice(1)}
+            {item.label}
           </button>
         ))}
       </div>
@@ -146,25 +193,24 @@ export default function Toolbar({ editor }) {
       {tab === "home" && (
         <div className="ribbon">
           <div className="ribbon-group labeled">
-            <span className="group-label">Clipboard</span>
             <div className="group-row">
-              <Tool title="Undo (Ctrl+Z)" onClick={() => editor.chain().focus().undo().run()}>
-                <Undo2 size={16} />
-              </Tool>
-              <Tool title="Redo (Ctrl+Y)" onClick={() => editor.chain().focus().redo().run()}>
-                <Redo2 size={16} />
-              </Tool>
-              <Tool
-                title="Clear formatting"
-                onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}
-              >
-                <Eraser size={16} />
-              </Tool>
+              <button type="button" className="ribbon-stack" title="Paste (Ctrl+V)" onClick={paste}>
+                <ClipboardPaste size={22} />
+                Paste
+              </button>
+              <div className="group-col">
+                <Tool title="Cut (Ctrl+X)" onClick={() => document.execCommand("cut")}>
+                  <Scissors size={14} />
+                </Tool>
+                <Tool title="Copy (Ctrl+C)" onClick={() => document.execCommand("copy")}>
+                  <Copy size={14} />
+                </Tool>
+              </div>
             </div>
+            <span className="group-label">Clipboard</span>
           </div>
 
           <div className="ribbon-group labeled">
-            <span className="group-label">Font</span>
             <div className="group-row wrap">
               <select
                 className="ribbon-select font"
@@ -188,6 +234,12 @@ export default function Toolbar({ editor }) {
                   </option>
                 ))}
               </select>
+              <Tool title="Grow font" onClick={() => bumpFont(editor, size, 1)}>
+                A+
+              </Tool>
+              <Tool title="Shrink font" onClick={() => bumpFont(editor, size, -1)}>
+                A-
+              </Tool>
               <Tool title="Bold (Ctrl+B)" active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
                 <Bold size={16} />
               </Tool>
@@ -224,11 +276,14 @@ export default function Toolbar({ editor }) {
                 />
                 <i style={{ background: editor.getAttributes("highlight").color || "#ffff00" }} />
               </label>
+              <Tool title="Clear formatting" onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}>
+                <Eraser size={16} />
+              </Tool>
             </div>
+            <span className="group-label">Font</span>
           </div>
 
           <div className="ribbon-group labeled">
-            <span className="group-label">Paragraph</span>
             <div className="group-row">
               <Tool title="Bullets" active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()}>
                 <List size={16} />
@@ -267,20 +322,47 @@ export default function Toolbar({ editor }) {
                 ))}
               </select>
             </div>
+            <span className="group-label">Paragraph</span>
           </div>
 
           <div className="ribbon-group labeled">
-            <span className="group-label">Styles</span>
-            <div className="group-row">
-              <select className="ribbon-select style" value={currentStyle(editor)} onChange={(e) => applyStyle(editor, e.target.value)}>
-                <option value="p">Normal</option>
-                <option value="h1">Heading 1</option>
-                <option value="h2">Heading 2</option>
-                <option value="h3">Heading 3</option>
-                <option value="h4">Heading 4</option>
-                <option value="quote">Quote</option>
-              </select>
+            <div className="style-gallery">
+              {[
+                ["p", "Normal"],
+                ["h1", "Heading 1"],
+                ["h2", "Heading 2"],
+                ["h3", "Heading 3"],
+                ["quote", "Quote"],
+              ].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`style-chip ${id} ${style === id ? "active" : ""}`}
+                  onClick={() => applyStyle(editor, id)}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
+            <span className="group-label">Styles</span>
+          </div>
+
+          <div className="ribbon-group labeled">
+            <div className="group-row">
+              <Tool wide title="Find (Ctrl+F)" onClick={onFind}>
+                <Search size={16} /> Find
+              </Tool>
+            </div>
+            <span className="group-label">Editing</span>
+          </div>
+          <div className="ribbon-group labeled">
+            <div className="group-row">
+              <button type="button" className="ribbon-stack" title="Scrap name, category, and other fields" onClick={onExtract}>
+                <ScanSearch size={22} />
+                Scrap
+              </button>
+            </div>
+            <span className="group-label">Scraping</span>
           </div>
         </div>
       )}
@@ -288,7 +370,6 @@ export default function Toolbar({ editor }) {
       {tab === "insert" && (
         <div className="ribbon">
           <div className="ribbon-group labeled">
-            <span className="group-label">Tables</span>
             <div className="group-row">
               <Tool wide title="Insert table" onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>
                 <TableIcon size={16} /> Table
@@ -306,25 +387,25 @@ export default function Toolbar({ editor }) {
                 <Trash2 size={16} />
               </Tool>
             </div>
+            <span className="group-label">Tables</span>
           </div>
           <div className="ribbon-group labeled">
-            <span className="group-label">Illustrations</span>
             <div className="group-row">
               <Tool wide title="Pictures" onClick={addImage}>
                 <ImagePlus size={16} /> Pictures
               </Tool>
             </div>
+            <span className="group-label">Illustrations</span>
           </div>
           <div className="ribbon-group labeled">
-            <span className="group-label">Links</span>
             <div className="group-row">
               <Tool wide title="Link" active={editor.isActive("link")} onClick={addLink}>
                 <Link2 size={16} /> Link
               </Tool>
             </div>
+            <span className="group-label">Links</span>
           </div>
           <div className="ribbon-group labeled">
-            <span className="group-label">Pages</span>
             <div className="group-row">
               <Tool wide title="Horizontal line" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
                 <Minus size={16} /> Line
@@ -333,6 +414,7 @@ export default function Toolbar({ editor }) {
                 <Plus size={16} /> Page break
               </Tool>
             </div>
+            <span className="group-label">Pages</span>
           </div>
         </div>
       )}
@@ -340,7 +422,20 @@ export default function Toolbar({ editor }) {
       {tab === "layout" && (
         <div className="ribbon">
           <div className="ribbon-group labeled">
-            <span className="group-label">Paragraph</span>
+            <div className="group-row">
+              {[
+                ["narrow", "Narrow"],
+                ["normal", "Normal"],
+                ["wide", "Wide"],
+              ].map(([id, label]) => (
+                <Tool key={id} wide title={`${label} margins`} active={margins === id} onClick={() => onMargins(id)}>
+                  {label}
+                </Tool>
+              ))}
+            </div>
+            <span className="group-label">Page Setup</span>
+          </div>
+          <div className="ribbon-group labeled">
             <div className="group-row">
               <Tool title="Decrease indent" onClick={() => editor.chain().focus().decreaseIndent().run()}>
                 <Outdent size={16} />
@@ -361,9 +456,9 @@ export default function Toolbar({ editor }) {
                 ))}
               </select>
             </div>
+            <span className="group-label">Paragraph</span>
           </div>
           <div className="ribbon-group labeled">
-            <span className="group-label">Alignment</span>
             <div className="group-row">
               <Tool title="Align left" active={editor.isActive({ textAlign: "left" })} onClick={() => editor.chain().focus().setTextAlign("left").run()}>
                 <AlignLeft size={16} />
@@ -378,6 +473,77 @@ export default function Toolbar({ editor }) {
                 <AlignJustify size={16} />
               </Tool>
             </div>
+            <span className="group-label">Alignment</span>
+          </div>
+        </div>
+      )}
+
+      {tab === "review" && (
+        <div className="ribbon">
+          <div className="ribbon-group labeled">
+            <div className="group-row">
+              <Tool wide title="Find (Ctrl+F)" onClick={onFind}>
+                <Search size={16} /> Find
+              </Tool>
+            </div>
+            <span className="group-label">Proofing</span>
+          </div>
+          <div className="ribbon-group labeled">
+            <div className="group-row">
+              <button type="button" className="ribbon-stack" title="Scrap name, category, summary, description, author, tags, and images" onClick={onExtract}>
+                <ScanSearch size={22} />
+                Scrap
+              </button>
+            </div>
+            <span className="group-label">Scraping</span>
+          </div>
+        </div>
+      )}
+
+      {tab === "view" && (
+        <div className="ribbon">
+          <div className="ribbon-group labeled">
+            <div className="group-row">
+              <Tool wide active={viewMode === "print"} onClick={() => onViewMode("print")} title="Print Layout">
+                Print Layout
+              </Tool>
+              <Tool wide active={viewMode === "web"} onClick={() => onViewMode("web")} title="Web Layout">
+                Web Layout
+              </Tool>
+            </div>
+            <span className="group-label">Views</span>
+          </div>
+          <div className="ribbon-group labeled">
+            <div className="group-row">
+              <Tool wide active={showNav} onClick={onToggleNav} title="Navigation Pane">
+                Navigation Pane
+              </Tool>
+              <Tool wide active={showRuler} onClick={onToggleRuler} title="Ruler">
+                Ruler
+              </Tool>
+            </div>
+            <span className="group-label">Show</span>
+          </div>
+          <div className="ribbon-group labeled">
+            <div className="group-row">
+              <Tool title="Undo" onClick={() => editor.chain().focus().undo().run()}>
+                <Undo2 size={16} />
+              </Tool>
+              <Tool title="Redo" onClick={() => editor.chain().focus().redo().run()}>
+                <Redo2 size={16} />
+              </Tool>
+              <Tool title="Print (Ctrl+P)" onClick={onPrint}>
+                <Printer size={16} />
+              </Tool>
+              <select className="ribbon-select sm" value={String(zoom)} onChange={(e) => onZoom(Number(e.target.value))}>
+                {[75, 100, 120, 150].map((n) => (
+                  <option key={n} value={n}>
+                    {n}%
+                  </option>
+                ))}
+              </select>
+            </div>
+            <span className="group-label">Zoom</span>
           </div>
         </div>
       )}

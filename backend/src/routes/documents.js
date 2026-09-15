@@ -13,7 +13,7 @@ import {
   UPLOADS_DIR,
 } from "../store.js";
 import { extractDocument } from "../extractorClient.js";
-import { isMysqlReady } from "../db.js";
+import { isMysqlReady, mysqlLocation } from "../db.js";
 import { deleteExtraction, getExtraction, saveExtraction } from "../extractions.js";
 
 const router = Router();
@@ -126,7 +126,7 @@ router.get("/:id/extraction", async (req, res) => {
     return res.status(503).json({ error: "MySQL is not connected. Start MySQL so extracted fields can be stored." });
   }
   const extraction = await getExtraction(doc.id);
-  res.json({ extraction });
+  res.json({ extraction, mysql: extraction ? { ...mysqlLocation(), document_id: doc.id, extraction_id: extraction.id } : mysqlLocation() });
 });
 
 router.post("/:id/extract", async (req, res) => {
@@ -135,20 +135,29 @@ router.post("/:id/extract", async (req, res) => {
   if (!canAccess(doc, req.user)) return res.status(403).json({ error: "You do not have access to this document." });
   if (!isMysqlReady()) {
     return res.status(503).json({
-      error: "MySQL is not connected. Start MySQL (see README) so name, category, images, and other fields can be stored.",
+      error: "MySQL is not connected. Start MySQL so scraped name, category, images, and other fields can be stored.",
     });
   }
 
+  let data;
   try {
-    const data = await extractDocument({
+    data = await extractDocument({
       html: req.body?.html || "",
       docxPath: doc.docxPath,
       filename: `${doc.title}.docx`,
     });
-    const stored = await saveExtraction(doc.id, data);
-    res.json({ extraction: stored, stored: true });
   } catch (err) {
-    res.status(502).json({ error: err.message || "Extraction service failed." });
+    return res.status(502).json({ error: err.message || "Scraping service failed." });
+  }
+
+  try {
+    const stored = await saveExtraction(doc.id, data);
+    const mysql = { ...mysqlLocation(), document_id: doc.id, extraction_id: stored.id };
+    console.log(`Stored scraped fields in MySQL ${mysql.database}.${mysql.table} for ${doc.id}`);
+    res.json({ extraction: stored, stored: true, mysql });
+  } catch (err) {
+    console.error("MySQL save failed:", err);
+    res.status(503).json({ error: `Scraped fields could not be saved to MySQL: ${err.message}` });
   }
 });
 

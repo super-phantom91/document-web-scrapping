@@ -21,6 +21,16 @@ export function isMysqlReady() {
   return ready;
 }
 
+export function mysqlLocation() {
+  return {
+    host: config.host,
+    port: config.port,
+    database: config.database,
+    table: "extractions",
+    images_table: "extraction_images",
+  };
+}
+
 export function getPool() {
   if (!pool) throw new Error("MySQL is not connected.");
   return pool;
@@ -95,6 +105,7 @@ export async function initDb() {
       emails JSON NULL,
       phones JSON NULL,
       dates JSON NULL,
+      scraped_json LONGTEXT NULL,
       extracted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       UNIQUE KEY uniq_document (document_id)
@@ -106,6 +117,14 @@ export async function initDb() {
     ["description", "TEXT NULL"],
     ["tags", "VARCHAR(512) NULL"],
     ["extra_json", "JSON NULL"],
+    ["emails", "JSON NULL"],
+    ["phones", "JSON NULL"],
+    ["dates", "JSON NULL"],
+    ["headings", "JSON NULL"],
+    ["paragraphs", "JSON NULL"],
+    ["tables_json", "JSON NULL"],
+    ["key_values", "JSON NULL"],
+    ["scraped_json", "LONGTEXT NULL"],
   ]);
 
   await pool.query(`
