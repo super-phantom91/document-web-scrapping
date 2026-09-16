@@ -4,7 +4,7 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
-export const DATA_DIR = path.join(ROOT, "data");
+const DATA_DIR = path.join(ROOT, "data");
 export const UPLOADS_DIR = path.join(ROOT, "uploads");
 export const YJS_DIR = path.join(DATA_DIR, "yjs");
 const STORE_FILE = path.join(DATA_DIR, "store.json");

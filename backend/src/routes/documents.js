@@ -33,10 +33,6 @@ function canAccess(doc, user) {
   return doc.ownerId === user.id || doc.visibility === "link";
 }
 
-function canEdit(doc, user) {
-  return canAccess(doc, user);
-}
-
 router.get("/", (req, res) => {
   res.json({ documents: listDocumentsForUser(req.user.id) });
 });
@@ -94,7 +90,7 @@ router.get("/:id", (req, res) => {
 router.patch("/:id", (req, res) => {
   const doc = getDocument(req.params.id);
   if (!doc) return res.status(404).json({ error: "Document not found." });
-  if (!canEdit(doc, req.user)) return res.status(403).json({ error: "You cannot edit this document." });
+  if (!canAccess(doc, req.user)) return res.status(403).json({ error: "You cannot edit this document." });
 
   const patch = {};
   if (typeof req.body?.title === "string") {

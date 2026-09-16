@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import { findUserById, publicUser } from "./store.js";
 
-export const JWT_SECRET = process.env.JWT_SECRET || "docusync-dev-secret-change-me";
+const JWT_SECRET = process.env.JWT_SECRET || "docusync-dev-secret-change-me";
 
 export function signToken(user) {
   return jwt.sign({ sub: user.id, username: user.username }, JWT_SECRET, { expiresIn: "7d" });

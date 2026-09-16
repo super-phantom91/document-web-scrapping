@@ -333,7 +333,7 @@ export default function EditorPage() {
 
   return (
     <div
-      className="editor-shell word-app"
+      className="editor-shell"
       onDragOver={(e) => {
         e.preventDefault();
         setDropActive(true);

@@ -464,22 +464,15 @@ def test_cjk_arabic_cyrillic_and_vietnamese():
 
 
 def test_scrap_functions():
-    from extractors.scraping import (
-        necessary_information,
-        scrap_author,
-        scrap_category,
-        scrap_fields_from_text,
-        scrap_name,
-        scrap_tags,
-    )
+    from extractors.scraping import necessary_information, scrap_fields_from_text
     from extractor import scrap_document
 
     text = "Name: Harbor Mug\nCategory: Kitchen\nAuthor: Casey\nTags: mug, home\nops@example.com"
     fields = scrap_fields_from_text(text)
-    assert scrap_name(text) == "Harbor Mug"
-    assert scrap_category(text) == "Kitchen"
-    assert scrap_author(text) == "Casey"
-    assert scrap_tags(text) == "mug, home"
+    assert fields["name"] == "Harbor Mug"
+    assert fields["category"] == "Kitchen"
+    assert fields["author"] == "Casey"
+    assert fields["tags"] == "mug, home"
     assert "ops@example.com" in fields["emails"]
     html = "<p>Name: Harbor Mug</p><p>Category: Kitchen</p>"
     data = scrap_document(html=html, filename="mug")

@@ -675,6 +675,8 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     ),
 }
 
+FIELD_ALIASES = {key: tuple(dict.fromkeys(aliases)) for key, aliases in FIELD_ALIASES.items()}
+
 KNOWN_FIELDS = tuple(FIELD_ALIASES.keys())
 BLOCK_FIELDS = {"summary", "description"}
 WEAK_HEADINGS = {

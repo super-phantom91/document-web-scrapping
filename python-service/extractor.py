@@ -6,36 +6,8 @@ from typing import Any
 
 from extractors.docx_extractor import extract_docx_bytes
 from extractors.html_extractor import extract_html
-from extractors.scraping import (
-    necessary_information,
-    scrap_author,
-    scrap_category,
-    scrap_contacts,
-    scrap_description,
-    scrap_fields_from_text,
-    scrap_name,
-    scrap_summary,
-    scrap_tags,
-)
 
 KNOWN = ("name", "category", "summary", "description", "author", "tags")
-
-__all__ = [
-    "KNOWN",
-    "extract_from_docx",
-    "extract_from_html",
-    "merge_extractions",
-    "necessary_information",
-    "scrap_author",
-    "scrap_category",
-    "scrap_contacts",
-    "scrap_description",
-    "scrap_document",
-    "scrap_fields_from_text",
-    "scrap_name",
-    "scrap_summary",
-    "scrap_tags",
-]
 
 
 def extract_from_docx(file_bytes: bytes, filename: str = "document.docx") -> dict[str, Any]:
