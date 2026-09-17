@@ -675,6 +675,111 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     ),
 }
 
+# Extra spellings that show up in mixed-language forms (no diacritics, bilingual, common office wording).
+_EXTRA_ALIASES: dict[str, tuple[str, ...]] = {
+    "name": (
+        "bezeichnung",
+        "produktname",
+        "dokumenttitel",
+        "documenttitel",
+        "item title",
+        "titulo del documento",
+        "titre du document",
+        "商品名",
+        "件名",
+        "品名",
+        "품명",
+        "제품이름",
+        "문서제목",
+        "اسم الملف",
+        "नाम दस्तावेज़",
+        "documentnaam",
+        "betegnelse",
+        "megnevezes",
+        "megnevezés",
+        "név",
+    ),
+    "category": (
+        "rubrik",
+        "fachbereich",
+        "document class",
+        "clase",
+        "classe",
+        "구분",
+        "분류명",
+        "文書種別",
+        "書類種別",
+        "فئة المستند",
+        "श्रेणी नाम",
+        "kategoria dokumentu",
+        "kategória",
+        "kategoria",
+    ),
+    "summary": (
+        "kurzfassung",
+        "kurztext",
+        "resena",
+        "reseña",
+        "sintesis",
+        "síntesis",
+        "要約文",
+        "한줄요약",
+        "ملخص المستند",
+        "rovid leiras",
+        "rövid leírás",
+    ),
+    "description": (
+        "erlauterung",
+        "erläuterung",
+        "langer text",
+        "texto completo",
+        "texte integral",
+        "texte intégral",
+        "상품설명",
+        "상세설명",
+        "本文",
+        "詳細内容",
+        "تفصيل",
+        "reszletes leiras",
+        "részletes leírás",
+    ),
+    "author": (
+        "bearbeiter",
+        "herausgeber",
+        "redacteur",
+        "rédacteur",
+        "redactor",
+        "elaborado por",
+        "realizado por",
+        "담당자",
+        "글쓴이",
+        "담당",
+        "担当者",
+        "執筆者",
+        "作成者",
+        "كُتب بواسطة",
+        "كتب بواسطة",
+        "szerzo",
+        "szerző",
+    ),
+    "tags": (
+        "schlagworte",
+        "stichworte",
+        "deskriptoren",
+        "palabras claves",
+        "mots clefs",
+        "parole chiave",
+        "검색키워드",
+        "タグ一覧",
+        "كلمات مفتاحية",
+        "cimkek",
+        "címkék",
+    ),
+}
+
+for _key, _extras in _EXTRA_ALIASES.items():
+    FIELD_ALIASES[_key] = FIELD_ALIASES[_key] + _extras
+
 FIELD_ALIASES = {key: tuple(dict.fromkeys(aliases)) for key, aliases in FIELD_ALIASES.items()}
 
 KNOWN_FIELDS = tuple(FIELD_ALIASES.keys())
@@ -823,8 +928,34 @@ WEAK_HEADINGS = {
 }
 
 _CJK = r"\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af"
+_INDIC = r"\u0900-\u0d7f"
 _LETTER = r"[^\W\d_]"
 _LABEL_CHAR = rf"(?:{_LETTER}|[\d_ &\-/'’.·])"
+_KR_PARTICLE = re.compile(r"(은|는|이|가|을|를|의)$")
+_JA_PARTICLE = re.compile(r"(は|が|を|の)$")
+_ASCII_SKIP = {
+    "the",
+    "ten",
+    "and",
+    "for",
+    "are",
+    "was",
+    "not",
+    "but",
+    "you",
+    "all",
+    "any",
+    "can",
+    "had",
+    "her",
+    "his",
+    "one",
+    "our",
+    "out",
+    "has",
+    "too",
+    "ad",
+}
 
 _LIST_PREFIX = re.compile(
     r"^\s*(?:"
@@ -837,13 +968,13 @@ _TRAILING_HINT = re.compile(
     r"(?:\s*[\*＊]+\s*|\s*\([^)]*\)\s*|\s*\[[^\]]*\]\s*|\s*（[^）]*）\s*|\s*【[^】]*】\s*)+$"
 )
 
-# Colon (including fullwidth), ideographic space, spaced dash/equals, pipe, or tab.
-_SEP = rf"(?:\t+|\u3000+|\s*[:：︰](?!//)\s*|\s+[-–—=]\s+|\s*\|\s*)"
+# Colon (including fullwidth, visarga, Armenian), ideographic space, two+ spaces, spaced dash/equals, pipe, or tab.
+_SEP = rf"(?:\t+|\u3000+|\s{{2,}}|\s*[:：︰ः։](?!//)\s*|\s+[-–—=]\s+|\s*\|\s*)"
 _LABEL_HINT = r"(?:\s*[\*＊]+|\s*\([^)]*\)|\s*\[[^\]]*\]|\s*（[^）]*）|\s*【[^】]*】)*"
 _LABEL = rf"{_LETTER}{_LABEL_CHAR}{{1,40}}"
 
 _LABEL_ONLY = re.compile(
-    rf"^\s*(?P<label>{_LABEL}){_LABEL_HINT}\s*[:：︰\-–—|]?\s*$",
+    rf"^\s*(?P<label>{_LABEL}){_LABEL_HINT}\s*[:：︰ः։\-–—|]?\s*$",
     re.IGNORECASE,
 )
 
@@ -919,31 +1050,53 @@ def _fold(text: str) -> str:
     return unicodedata.normalize("NFKC", text or "").casefold()
 
 
+def _ascii_fold(text: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", text or "")
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch)).casefold()
+
+
 _ALIAS_LOOKUP: dict[str, str] = {}
 for _canonical, _aliases in FIELD_ALIASES.items():
     for _alias in _aliases:
         _ALIAS_LOOKUP.setdefault(_fold(_alias), _canonical)
 
+_ALIAS_ASCII: dict[str, str] = {}
+for _folded, _canonical in _ALIAS_LOOKUP.items():
+    _plain = _ascii_fold(_folded)
+    if _plain == _folded or _plain in _ASCII_SKIP or len(_plain) < 3:
+        continue
+    _existing = _ALIAS_ASCII.get(_plain)
+    if _existing and _existing != _canonical:
+        _ALIAS_ASCII.pop(_plain, None)
+        continue
+    _ALIAS_ASCII.setdefault(_plain, _canonical)
+
 _ALIAS_ALT = "|".join(
     re.escape(alias)
-    for alias in sorted(_ALIAS_LOOKUP, key=len, reverse=True)
+    for alias in sorted({*_ALIAS_LOOKUP, *_ALIAS_ASCII}, key=len, reverse=True)
     if alias
 )
-_GLUE = _CJK + r"\u0590-\u05ff\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff\u0e00-\u0e7f"
+_PARTICLE = r"(?:은|는|이|가|을|를|의|は|が|を|の)?"
+_KNOWN_LABEL = rf"(?:{_ALIAS_ALT}){_PARTICLE}(?:\s*[\/|｜]\s*(?:{_ALIAS_ALT}){_PARTICLE})?"
+_GLUE = (
+    _CJK
+    + _INDIC
+    + r"\u0590-\u05ff\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff\u0e00-\u0e7f"
+)
 _FIELD_START = rf"(?:^|(?<=[\s;|/；。、，،؛\u3000{_GLUE}]))"
-_NEXT_FIELD = rf"(?:[\s\u3000]+|(?<=[{_GLUE}]))(?:{_ALIAS_ALT}){_LABEL_HINT}\s*{_SEP}"
+_NEXT_FIELD = rf"(?:[\s\u3000]+|(?<=[{_GLUE}]))(?:{_KNOWN_LABEL}){_LABEL_HINT}\s*{_SEP}"
 _KNOWN_LABELED = re.compile(
-    rf"(?i){_FIELD_START}(?P<label>{_ALIAS_ALT}){_LABEL_HINT}\s*{_SEP}(?P<value>.+?)(?={_NEXT_FIELD}|$)"
+    rf"(?im){_FIELD_START}(?P<label>{_KNOWN_LABEL}){_LABEL_HINT}\s*{_SEP}(?P<value>.+?)(?={_NEXT_FIELD}|$)"
 )
 _EXTRA_LABELED = re.compile(
-    rf"(?i)(?:^|(?<=[\s\u3000]))(?P<label>{_LABEL}){_LABEL_HINT}\s*[:：︰](?!//)\s*(?P<value>.+?)"
-    rf"(?=\s+{_LABEL}{_LABEL_HINT}\s*[:：︰]|$)"
+    rf"(?im)(?:^|(?<=[\s\u3000]))(?P<label>{_LABEL}){_LABEL_HINT}\s*[:：︰ः։](?!//)\s*(?P<value>.+?)"
+    rf"(?=\s+{_LABEL}{_LABEL_HINT}\s*[:：︰ः։]|$)"
 )
 
 
 def strip_list_prefix(text: str) -> str:
     text = unicodedata.normalize("NFKC", text or "")
-    text = text.replace("\u00a0", " ").replace("\u202f", " ").replace("\u3000", " ")
+    text = text.replace("\u00a0", " ").replace("\u202f", " ").replace("\u3000", "\t")
     return _LIST_PREFIX.sub("", text.strip())
 
 
@@ -953,18 +1106,41 @@ def peel_label(text: str) -> str:
 
 def normalize_label(text: str) -> str:
     cleaned = re.sub(r"\s+", " ", _fold(peel_label(text)))
-    return cleaned.rstrip(":-–—|=?？：︰؛، ")
+    return cleaned.rstrip(":-–—|=?？：︰ः։؛، ")
 
 
 def match_canonical_field(label: str) -> str | None:
-    return _ALIAS_LOOKUP.get(normalize_label(label))
+    normalized = normalize_label(label)
+    candidates = [normalized]
+    candidates.extend(
+        part.strip()
+        for part in re.split(r"\s*[\/|｜]\s*", normalized)
+        if part.strip() and part.strip() != normalized
+    )
+    for part in candidates:
+        if not part:
+            continue
+        hit = _ALIAS_LOOKUP.get(part) or _ALIAS_LOOKUP.get(_ascii_fold(part)) or _ALIAS_ASCII.get(_ascii_fold(part))
+        if hit:
+            return hit
+        stripped = _KR_PARTICLE.sub("", part)
+        if stripped != part and stripped:
+            hit = _ALIAS_LOOKUP.get(stripped) or _ALIAS_ASCII.get(_ascii_fold(stripped))
+            if hit:
+                return hit
+        stripped = _JA_PARTICLE.sub("", part)
+        if stripped != part and stripped:
+            hit = _ALIAS_LOOKUP.get(stripped)
+            if hit:
+                return hit
+    return None
 
 
 def clean_value(value: str) -> str:
     value = unicodedata.normalize("NFKC", value or "")
     value = value.replace("\u00a0", " ").replace("\u202f", " ")
     value = value.strip(" \t;|")
-    value = re.sub(r"^[:：︰\-–—=]+\s*", "", value)
+    value = re.sub(r"^[:：︰ः։\-–—=]+\s*", "", value)
     return re.sub(r"[ \t]+", " ", value).strip()
 
 
@@ -996,32 +1172,58 @@ def parse_labeled_line(line: str) -> tuple[str, str] | None:
 def parse_all_labeled_fields(text: str) -> list[tuple[str, str]]:
     """Find one or more Label: value pairs anywhere in the text."""
     found: list[tuple[str, str]] = []
-    occupied: list[tuple[int, int]] = []
+    seen: set[tuple[str, str]] = set()
+    occupied_by_chunk: dict[int, list[tuple[int, int]]] = {}
 
-    def _take(match: re.Match[str], key: str) -> None:
-        value = clean_value(match.group("value"))
+    def _add(key: str, value: str) -> None:
+        value = clean_value(value)
         if not value:
             return
-        span = match.span()
-        if any(span[0] < end and span[1] > start for start, end in occupied):
+        item = (key, value)
+        if item in seen:
             return
-        found.append((key, value))
-        occupied.append(span)
+        if key in KNOWN_FIELDS and any(existing == key for existing, _ in found):
+            return
+        seen.add(item)
+        found.append(item)
 
-    for match in _KNOWN_LABELED.finditer(strip_list_prefix(text or "")):
-        canonical = match_canonical_field(match.group("label"))
-        if canonical:
-            _take(match, canonical)
+    def _take(chunk_id: int, match: re.Match[str], key: str) -> None:
+        spans = occupied_by_chunk.setdefault(chunk_id, [])
+        span = match.span()
+        if any(span[0] < end and span[1] > start for start, end in spans):
+            return
+        before = len(found)
+        _add(key, match.group("value"))
+        if len(found) > before:
+            spans.append(span)
 
-    if not found:
-        single = parse_labeled_line(text)
+    chunks: list[str] = []
+    stripped = strip_list_prefix(text or "")
+    if stripped:
+        chunks.append(stripped)
+    for line in (text or "").splitlines():
+        line = strip_list_prefix(line)
+        if line and line not in chunks:
+            chunks.append(line)
+
+    for chunk_id, chunk in enumerate(chunks):
+        matched_known = False
+        for match in _KNOWN_LABELED.finditer(chunk):
+            canonical = match_canonical_field(match.group("label"))
+            if canonical:
+                _take(chunk_id, match, canonical)
+                matched_known = True
+        if matched_known:
+            continue
+        single = parse_labeled_line(chunk)
         if single:
-            return [single]
-        for match in _EXTRA_LABELED.finditer(text or ""):
+            _add(single[0], single[1])
+            continue
+        for match in _EXTRA_LABELED.finditer(chunk):
             label = match.group("label")
             if match_canonical_field(label):
                 continue
-            _take(match, normalize_label(label))
+            _take(chunk_id, match, normalize_label(label))
     return found
 
 
@@ -1033,7 +1235,7 @@ def parse_label_only(line: str, *, extra: bool = False) -> str | None:
     canonical = match_canonical_field(match.group("label"))
     if canonical:
         return canonical
-    if extra and line.rstrip().endswith((":", "-", "–", "—", "=", "：", "︰")):
+    if extra and line.rstrip().endswith((":", "-", "–", "—", "=", "：", "︰", "ः", "։")):
         return normalize_label(match.group("label"))
     return None
 
@@ -1051,7 +1253,8 @@ def is_plausible_value(key: str, value: str) -> bool:
     if key == "name":
         return 1 <= len(value) <= 160 and value.count("\n") <= 2
     if key == "author":
-        return 2 <= len(value) <= 80 and not _EMAIL.search(value) and len(value.split()) <= 8
+        words = [part for part in re.split(r"[\s\u3000、，,]+", value) if part]
+        return 2 <= len(value) <= 80 and not _EMAIL.search(value) and 1 <= len(words) <= 8
     if key == "category":
         return 1 <= len(value) <= 80
     if key == "tags":
@@ -1063,14 +1266,18 @@ def _is_cjk(text: str) -> bool:
     return bool(re.search(rf"[{_CJK}]", text))
 
 
+def _is_non_latin(text: str) -> bool:
+    return bool(re.search(r"[^\W\d_A-Za-z]", text or ""))
+
+
 def value_quality(key: str, value: str) -> int:
     value = (value or "").strip()
     if not is_plausible_value(key, value):
         return 0
-    words = value.split()
+    words = [part for part in re.split(r"[\s\u3000、，,]+", value) if part]
     lowered = _fold(value)
     if key == "name":
-        if value.isdigit() or (len(value) < 3 and not _is_cjk(value)):
+        if value.isdigit() or (len(value) < 3 and not _is_cjk(value) and not _is_non_latin(value)):
             return 3
         if lowered in WEAK_HEADINGS or lowered in {
             "product sheet",
@@ -1086,7 +1293,7 @@ def value_quality(key: str, value: str) -> int:
             "제품 시트",
         }:
             return 6
-        if _is_cjk(value) and 2 <= len(value) <= 24:
+        if (_is_cjk(value) or _is_non_latin(value)) and 2 <= len(value) <= 40:
             return 22
         if 2 <= len(words) <= 8 and sum(c.isalpha() for c in value) >= 6:
             return 22
@@ -1094,13 +1301,14 @@ def value_quality(key: str, value: str) -> int:
             return 16
         return 12
     if key == "author":
-        if _is_cjk(value) and 2 <= len(value) <= 8:
+        if (_is_cjk(value) or _is_non_latin(value)) and 2 <= len(value) <= 40:
             return 20
         if 2 <= len(words) <= 4:
             return 20
         return 12
     if key == "category":
-        return 18 if 1 <= len(words) <= 6 or (_is_cjk(value) and len(value) <= 12) else 10
+        compact = _is_cjk(value) or _is_non_latin(value)
+        return 18 if 1 <= len(words) <= 6 or (compact and len(value) <= 16) else 10
     if key in {"summary", "description"}:
         return 14 if len(value) >= 40 else 10
     return 10

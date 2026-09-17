@@ -463,6 +463,64 @@ def test_cjk_arabic_cyrillic_and_vietnamese():
     assert vi["author"] == "Nguyễn An"
 
 
+def test_multilingual_accuracy():
+    body = "".join(
+        [
+            _p("Name / Nombre: Aurora Lamp"),
+            _p("Categoria: Hogar"),
+            _p("Descripcion: Lámpara LED compacta con brillo ajustable para escritorio."),
+            _p("Autor: Ana Garcia"),
+            _p("Palabras claves: lampara, led"),
+        ]
+    )
+    es = extract_from_docx(_docx(body), "es-plain.docx")
+    assert es["name"] == "Aurora Lamp"
+    assert es["category"] == "Hogar"
+    assert es["author"] == "Ana Garcia"
+    assert "brillo ajustable" in es["description"]
+    assert "lampara" in es["tags"]
+
+    de = extract_from_html(
+        "<p>Bezeichnung: Nordlampe</p><p>Kategorie: Haushalt</p><p>Verfasser: Hans Müller</p>",
+        "de",
+    )
+    assert de["name"] == "Nordlampe"
+    assert de["category"] == "Haushalt"
+    assert de["author"] == "Hans Müller"
+
+    ko = extract_from_html(
+        "제목은: 북극 램프\n카테고리: 조명\n작성자: 김민수\n태그: 램프, LED",
+        "ko",
+    )
+    assert ko["name"] == "북극 램프"
+    assert ko["category"] == "조명"
+    assert ko["author"] == "김민수"
+    assert "램프" in ko["tags"]
+
+    ja = extract_from_html("タイトルは：北風ランプ　カテゴリ：照明　著者：山田太郎", "ja")
+    assert ja["name"] == "北風ランプ"
+    assert ja["category"] == "照明"
+    assert ja["author"] == "山田太郎"
+
+    hi = extract_from_html("नामः उत्तरी दीपक\nश्रेणीः घर\nलेखकः अंजलि शर्मा", "hi")
+    assert hi["name"] == "उत्तरी दीपक"
+    assert hi["category"] == "घर"
+    assert hi["author"] == "अंजलि शर्मा"
+
+    spaced = extract_from_html("名称\t北极台灯\n类别\t家居\n作者\t李明", "zh-tab")
+    assert spaced["name"] == "北极台灯"
+    assert spaced["category"] == "家居"
+    assert spaced["author"] == "李明"
+
+    mixed = extract_from_html(
+        "<p>Nom du document: Lampe Nord</p><p>Categorie: Maison</p><p>Resume: Petite lampe LED pour le bureau avec luminosité réglable.</p>",
+        "fr-plain",
+    )
+    assert mixed["name"] == "Lampe Nord"
+    assert mixed["category"] == "Maison"
+    assert "luminosité" in mixed["summary"] or "luminosite" in mixed["summary"] or "LED" in mixed["summary"]
+
+
 def test_scrap_functions():
     from extractors.scraping import necessary_information, scrap_fields_from_text
     from extractor import scrap_document
