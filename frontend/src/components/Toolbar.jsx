@@ -116,6 +116,7 @@ export default function Toolbar({
   onFind,
   onExtract,
   onPrint,
+  extracting,
 }) {
   const [, setTick] = useState(0);
 
@@ -357,9 +358,15 @@ export default function Toolbar({
           </div>
           <div className="ribbon-group labeled">
             <div className="group-row">
-              <button type="button" className="ribbon-stack" title="Scrap name, category, and other fields" onClick={onExtract}>
-                <ScanSearch size={22} />
-                Scrap
+              <button
+                type="button"
+                className={`ribbon-stack ${extracting ? "is-busy" : ""}`}
+                title="Scrap name, category, and other fields"
+                onClick={onExtract}
+                disabled={extracting}
+              >
+                <ScanSearch size={22} className={extracting ? "spin" : ""} />
+                {extracting ? "Scrapping" : "Scrap"}
               </button>
             </div>
             <span className="group-label">Scraping</span>
@@ -490,9 +497,15 @@ export default function Toolbar({
           </div>
           <div className="ribbon-group labeled">
             <div className="group-row">
-              <button type="button" className="ribbon-stack" title="Scrap name, category, summary, description, author, tags, and images" onClick={onExtract}>
-                <ScanSearch size={22} />
-                Scrap
+              <button
+                type="button"
+                className={`ribbon-stack ${extracting ? "is-busy" : ""}`}
+                title="Scrap name, category, summary, description, author, tags, and images"
+                onClick={onExtract}
+                disabled={extracting}
+              >
+                <ScanSearch size={22} className={extracting ? "spin" : ""} />
+                {extracting ? "Scrapping" : "Scrap"}
               </button>
             </div>
             <span className="group-label">Scraping</span>

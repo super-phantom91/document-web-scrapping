@@ -391,8 +391,8 @@ export default function EditorPage() {
         <button className="btn ghost light" onClick={share}>
           <Share2 size={16} /> Share
         </button>
-        <button className="btn primary" onClick={extract} title="Scrap name, category, and other fields">
-          <ScanSearch size={16} /> Scrap
+        <button className="btn primary" onClick={extract} disabled={extracting} title="Scrap name, category, and other fields">
+          <ScanSearch size={16} className={extracting ? "spin" : ""} /> {extracting ? "Scrapping…" : "Scrap"}
         </button>
       </header>
       <input
@@ -472,6 +472,7 @@ export default function EditorPage() {
             onFind={() => setFindOpen(true)}
             onExtract={extract}
             onPrint={() => window.print()}
+            extracting={extracting}
           />
           <div className="editor-body">
             {showNav && <NavPane editor={editor} onClose={() => setShowNav(false)} />}
@@ -518,6 +519,13 @@ export default function EditorPage() {
             <span>{words} words</span>
             <span>{chars} characters</span>
             <span>English (United States)</span>
+            <span className={extracting ? "status-live" : ""}>
+              {extracting
+                ? "Scrapping…"
+                : extraction
+                  ? `${["name", "category", "summary", "description", "author", "tags"].filter((key) => extraction[key]).length} fields scraped`
+                  : "Ready"}
+            </span>
             <span>{peers.length} editing</span>
             <label className="zoom-control">
               <span>{zoom}%</span>

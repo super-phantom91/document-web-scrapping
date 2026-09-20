@@ -1094,8 +1094,12 @@ _EXTRA_LABELED = re.compile(
 )
 
 
+_INVISIBLE = dict.fromkeys(map(ord, "\ufeff\u200b\u200c\u200d\u2060\u00ad"), None)
+
+
 def strip_list_prefix(text: str) -> str:
     text = unicodedata.normalize("NFKC", text or "")
+    text = text.translate(_INVISIBLE)
     text = text.replace("\u00a0", " ").replace("\u202f", " ").replace("\u3000", "\t")
     return _LIST_PREFIX.sub("", text.strip())
 
@@ -1105,7 +1109,8 @@ def peel_label(text: str) -> str:
 
 
 def normalize_label(text: str) -> str:
-    cleaned = re.sub(r"\s+", " ", _fold(peel_label(text)))
+    cleaned = _fold(peel_label(text)).replace("ـ", "")
+    cleaned = re.sub(r"\s+", " ", cleaned)
     return cleaned.rstrip(":-–—|=?？：︰ः։؛، ")
 
 
@@ -1268,6 +1273,10 @@ def _is_cjk(text: str) -> bool:
 
 def _is_non_latin(text: str) -> bool:
     return bool(re.search(r"[^\W\d_A-Za-z]", text or ""))
+
+
+def is_compact_script(text: str) -> bool:
+    return _is_cjk(text) or _is_non_latin(text)
 
 
 def value_quality(key: str, value: str) -> int:

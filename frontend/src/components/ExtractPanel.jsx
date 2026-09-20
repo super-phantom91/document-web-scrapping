@@ -1,28 +1,67 @@
 import { ScanSearch, X } from "lucide-react";
 
+const CORE_FIELDS = [
+  ["name", "Name"],
+  ["category", "Category"],
+  ["summary", "Summary"],
+  ["description", "Description"],
+  ["author", "Author"],
+  ["tags", "Tags"],
+  ["emails", "Emails"],
+  ["phones", "Phones"],
+  ["dates", "Dates"],
+];
+
+function isEmpty(value) {
+  return value == null || value === "" || (Array.isArray(value) && value.length === 0);
+}
+
+function display(value) {
+  if (isEmpty(value)) return "—";
+  return Array.isArray(value) ? value.join(", ") : String(value);
+}
+
 function Field({ label, value }) {
-  const empty = value == null || value === "" || (Array.isArray(value) && value.length === 0);
+  const empty = isEmpty(value);
   return (
-    <div className="extract-field">
+    <div className={`extract-field ${empty ? "empty" : "filled"}`}>
       <span>{label}</span>
-      <strong>{empty ? "—" : Array.isArray(value) ? value.join(", ") : value}</strong>
+      <strong dir="auto">{display(value)}</strong>
     </div>
   );
 }
 
 export default function ExtractPanel({ data, onClose, onScrap, loading, error, mysql }) {
+  const filled = CORE_FIELDS.filter(([key]) => !isEmpty(data?.[key])).length;
+  const extraCount = data?.extra ? Object.keys(data.extra).length : 0;
+  const coverage = Math.round((filled / CORE_FIELDS.length) * 100);
+
   return (
-    <aside className="extract-panel word-taskpane">
+    <aside className={`extract-panel word-taskpane ${loading ? "is-loading" : ""} ${data ? "has-data" : ""}`}>
       <header>
-        <h2>Scraped information</h2>
+        <div className="taskpane-heading">
+          <h2>Scraped information</h2>
+          {data && !loading && (
+            <span className="pane-count">
+              {filled} of {CORE_FIELDS.length} fields
+            </span>
+          )}
+        </div>
         <button className="icon-btn" onClick={onClose} title="Close">
           <X size={16} />
         </button>
       </header>
+      <div className={`scrap-progress ${loading ? "active" : ""}`} aria-hidden="true" />
       <p className="taskpane-sub">Name, category, summary, description, author, tags</p>
+      {data && (
+        <div className="coverage" title={`${coverage}% of core fields found`}>
+          <span style={{ width: `${coverage}%` }} />
+        </div>
+      )}
       <div className="taskpane-actions">
-        <button type="button" className="btn primary" onClick={onScrap} disabled={loading}>
-          <ScanSearch size={16} /> {loading ? "Scrapping…" : "Scrap document"}
+        <button type="button" className="btn primary scrap-btn" onClick={onScrap} disabled={loading}>
+          <ScanSearch size={16} className={loading ? "spin" : ""} />
+          {loading ? "Scrapping…" : "Scrap document"}
         </button>
       </div>
 
@@ -42,28 +81,35 @@ export default function ExtractPanel({ data, onClose, onScrap, loading, error, m
         </p>
       )}
 
-      {(data || loading) && (
+      {loading && !data && (
+        <div className="extract-body">
+          <div className="extract-skel" aria-hidden="true">
+            {CORE_FIELDS.map(([key]) => (
+              <div key={key} className="skel-card">
+                <i />
+                <b />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {data && (
         <div className="extract-body">
           <div className="extract-grid">
-            <Field label="Name" value={data?.name} />
-            <Field label="Category" value={data?.category} />
-            <Field label="Summary" value={data?.summary} />
-            <Field label="Description" value={data?.description} />
-            <Field label="Author" value={data?.author} />
-            <Field label="Tags" value={data?.tags} />
-            <Field label="Emails" value={data?.emails} />
-            <Field label="Phones" value={data?.phones} />
-            <Field label="Dates" value={data?.dates} />
+            {CORE_FIELDS.map(([key, label]) => (
+              <Field key={key} label={label} value={data?.[key]} />
+            ))}
           </div>
 
-          {data?.extra && Object.keys(data.extra).length > 0 && (
+          {extraCount > 0 && (
             <section>
               <h3>Other fields</h3>
               <dl className="kv">
                 {Object.entries(data.extra).map(([k, v]) => (
                   <div key={k}>
-                    <dt>{k}</dt>
-                    <dd>{String(v)}</dd>
+                    <dt dir="auto">{k}</dt>
+                    <dd dir="auto">{String(v)}</dd>
                   </div>
                 ))}
               </dl>
@@ -75,7 +121,7 @@ export default function ExtractPanel({ data, onClose, onScrap, loading, error, m
               <h3>Headings</h3>
               <ul className="outline">
                 {data.headings.map((h, i) => (
-                  <li key={i} style={{ paddingLeft: (h.level - 1) * 12 }}>
+                  <li key={i} style={{ paddingLeft: (h.level - 1) * 12 }} dir="auto">
                     {h.text}
                   </li>
                 ))}
@@ -111,7 +157,9 @@ export default function ExtractPanel({ data, onClose, onScrap, loading, error, m
                       {table.map((row, r) => (
                         <tr key={r}>
                           {row.map((cell, c) => (
-                            <td key={c}>{cell}</td>
+                            <td key={c} dir="auto">
+                              {cell}
+                            </td>
                           ))}
                         </tr>
                       ))}

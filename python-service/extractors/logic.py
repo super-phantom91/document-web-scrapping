@@ -11,6 +11,7 @@ from extractors.field_patterns import (
     KNOWN_FIELDS,
     clean_value,
     extract_contacts,
+    is_compact_script,
     is_mostly_empty,
     is_untitled_filename,
     is_weak_heading,
@@ -211,7 +212,11 @@ def guess_name_from_filename(filename: str) -> str | None:
 def fill_from_full_text(result: dict[str, Any], text: str) -> None:
     for key, value in parse_all_labeled_fields(text or ""):
         apply_field(result, key, value)
-    contacts = extract_contacts(text or "")
+    blobs = [text or ""]
+    extra = result.get("extra") or {}
+    if extra:
+        blobs.append(" ".join(str(value) for value in extra.values()))
+    contacts = extract_contacts("\n".join(blobs))
     result["emails"] = contacts["emails"]
     result["phones"] = contacts["phones"]
     result["dates"] = contacts["dates"]
@@ -228,21 +233,25 @@ def fill_heuristics(result: dict[str, Any], filename: str, *, fallback_name: str
         for p in paragraphs
         if not looks_like_field_line(p) and not match_canonical_field(strip_list_prefix(p))
     ]
+    compact = any(is_compact_script(p) for p in prose) or is_compact_script(heading_name or "")
+    summary_min = 12 if compact else 40
+    description_min = 24 if compact else 80
+    leftover_min = 8 if compact else 20
 
     if is_mostly_empty(result.get("name")):
         result["name"] = heading_name or fallback_name or guess_name_from_filename(filename)
 
     if is_mostly_empty(result.get("summary")):
-        mid = [p for p in prose if 40 <= len(p) <= 400]
-        result["summary"] = mid[0] if mid else longest_paragraph(prose)
+        mid = [p for p in prose if summary_min <= len(p) <= 400]
+        result["summary"] = mid[0] if mid else longest_paragraph(prose, min_length=summary_min)
 
     if is_mostly_empty(result.get("description")):
-        long_text = longest_paragraph(prose, min_length=80)
+        long_text = longest_paragraph(prose, min_length=description_min)
         if long_text and long_text != result.get("summary"):
             result["description"] = long_text
         elif len(prose) > 1:
             used = {result.get("name"), result.get("summary")}
-            leftovers = [p for p in prose if p not in used and len(p) > 20]
+            leftovers = [p for p in prose if p not in used and len(p) > leftover_min]
             if leftovers:
                 result["description"] = "\n\n".join(leftovers[:5])
     result.pop("_quality", None)

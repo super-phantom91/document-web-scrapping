@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from extractors.field_patterns import extract_contacts, parse_all_labeled_fields
+from extractors.field_patterns import extract_contacts, parse_all_labeled_fields, value_quality
 
 NECESSARY_FIELDS = ("name", "category", "summary", "description", "author", "tags")
 
@@ -12,16 +12,20 @@ NECESSARY_FIELDS = ("name", "category", "summary", "description", "author", "tag
 def scrap_fields_from_text(text: str) -> dict[str, Any]:
     """Pull labeled fields from plain text (Name:, Categoría:, 名称：, …)."""
     necessary: dict[str, str] = {}
+    scores: dict[str, int] = {}
     extra: dict[str, str] = {}
     blobs = [text or ""]
     blobs.extend(line.strip() for line in (text or "").splitlines() if line.strip())
     for blob in blobs:
         for key, value in parse_all_labeled_fields(blob):
             if key in NECESSARY_FIELDS:
-                necessary.setdefault(key, value)
+                quality = value_quality(key, value)
+                if quality and quality >= scores.get(key, 0):
+                    necessary[key] = value
+                    scores[key] = quality
             else:
                 extra.setdefault(key, value)
-    contacts = extract_contacts(text or "")
+    contacts = extract_contacts("\n".join([text or "", *extra.values()]))
     return {
         **{field: necessary.get(field) for field in NECESSARY_FIELDS},
         "extra": extra,

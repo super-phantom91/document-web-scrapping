@@ -5,9 +5,22 @@ from __future__ import annotations
 from typing import Any
 
 from extractors.docx_extractor import extract_docx_bytes
+from extractors.field_patterns import is_mostly_empty, value_quality
 from extractors.html_extractor import extract_html
 
 KNOWN = ("name", "category", "summary", "description", "author", "tags")
+
+
+def _pick_field(key: str, left: Any, right: Any) -> Any:
+    if is_mostly_empty(left):
+        return right
+    if is_mostly_empty(right):
+        return left
+    left_text, right_text = str(left), str(right)
+    left_q, right_q = value_quality(key, left_text), value_quality(key, right_text)
+    if key in {"summary", "description"} and right_q >= left_q and len(right_text) > len(left_text) + 20:
+        return right
+    return left if left_q >= right_q else right
 
 
 def extract_from_docx(file_bytes: bytes, filename: str = "document.docx") -> dict[str, Any]:
@@ -27,7 +40,9 @@ def merge_extractions(docx_data: dict[str, Any] | None, html_data: dict[str, Any
         return extract_from_html("")
 
     merged = dict(html_data)
-    for key in KNOWN + ("title", "subject", "keywords", "created", "modified", "last_modified_by"):
+    for key in KNOWN:
+        merged[key] = _pick_field(key, docx_data.get(key), html_data.get(key))
+    for key in ("title", "subject", "keywords", "created", "modified", "last_modified_by"):
         merged[key] = docx_data.get(key) or merged.get(key)
     if docx_data.get("images"):
         merged["images"] = docx_data["images"]

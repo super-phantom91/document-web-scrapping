@@ -521,6 +521,42 @@ def test_multilingual_accuracy():
     assert "luminosité" in mixed["summary"] or "luminosite" in mixed["summary"] or "LED" in mixed["summary"]
 
 
+def test_merge_quality_and_compact_heuristics():
+    from extractor import merge_extractions
+
+    html = extract_from_html("<p>Name: Harbor Mug</p><p>Category: Kitchen</p><p>Author: Casey</p>", "mug")
+    merged = merge_extractions(
+        {
+            "name": "Product Sheet",
+            "category": None,
+            "summary": None,
+            "description": None,
+            "author": None,
+            "tags": None,
+            "images": [],
+            "tables": [],
+            "headings": [],
+            "extra": {},
+            "key_values": {},
+            "emails": [],
+            "phones": [],
+            "dates": [],
+        },
+        html,
+    )
+    assert merged["name"] == "Harbor Mug"
+    assert merged["category"] == "Kitchen"
+    assert merged["author"] == "Casey"
+
+    zh = extract_from_html("<h1>北极台灯</h1><p>可调亮度的小型LED台灯，适合夜间阅读。</p>", "zh-prose")
+    assert zh["name"] == "北极台灯"
+    assert "夜间阅读" in (zh["summary"] or "")
+
+    zw = extract_from_html("Name:\u200b Aurora Lamp\nCategory:\u200b Home", "zw")
+    assert zw["name"] == "Aurora Lamp"
+    assert zw["category"] == "Home"
+
+
 def test_scrap_functions():
     from extractors.scraping import necessary_information, scrap_fields_from_text
     from extractor import scrap_document
