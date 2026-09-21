@@ -520,6 +520,49 @@ def test_multilingual_accuracy():
     assert mixed["category"] == "Maison"
     assert "luminosité" in mixed["summary"] or "luminosite" in mixed["summary"] or "LED" in mixed["summary"]
 
+    spaced = extract_from_html("名称 北极台灯类别 家居作者 李明", "zh-space")
+    assert spaced["name"] == "北极台灯"
+    assert spaced["category"] == "家居"
+    assert spaced["author"] == "李明"
+
+    ideo = extract_from_html("名称　北极台灯　类别　家居　作者　李明", "zh-ideo")
+    assert ideo["name"] == "北极台灯"
+    assert ideo["category"] == "家居"
+    assert ideo["author"] == "李明"
+
+    copula = extract_from_html("名称是北极台灯\n类别为家居\n作者是李明", "zh-copula")
+    assert copula["name"] == "北极台灯"
+    assert copula["category"] == "家居"
+    assert copula["author"] == "李明"
+
+    bilingual = extract_from_html("名称（Name）：北极台灯\nCategoría (Category): Hogar", "bilingual")
+    assert bilingual["name"] == "北极台灯"
+    assert bilingual["category"] == "Hogar"
+
+    equals = extract_from_html("Name=Aurora Lamp\nCategory=Home\nAuthor=Casey Lee", "equals")
+    assert equals["name"] == "Aurora Lamp"
+    assert equals["category"] == "Home"
+    assert equals["author"] == "Casey Lee"
+
+    rtl = extract_from_html("\u200fالاسم:\u200f مصباح الشمال\n\u200fالفئة:\u200f منزل", "ar-rtl")
+    assert rtl["name"] == "مصباح الشمال"
+    assert rtl["category"] == "منزل"
+
+    th = extract_from_html("ชื่อ: โคมไฟเหนือ\nหมวดหมู่: บ้าน\nผู้แต่ง: สมชาย", "th")
+    assert th["name"] == "โคมไฟเหนือ"
+    assert th["category"] == "บ้าน"
+    assert th["author"] == "สมชาย"
+
+    he = extract_from_html("שם: מנורת הצפון\nקטגוריה: בית\nמחבר: יוסי כהן", "he")
+    assert he["name"] == "מנורת הצפון"
+    assert he["category"] == "בית"
+    assert he["author"] == "יוסי כהן"
+
+    uk = extract_from_html("Назва: Північна лампа\nКатегорія: Дім\nАвтор: Іван Петренко", "uk")
+    assert uk["name"] == "Північна лампа"
+    assert uk["category"] == "Дім"
+    assert uk["author"] == "Іван Петренко"
+
 
 def test_merge_quality_and_compact_heuristics():
     from extractor import merge_extractions

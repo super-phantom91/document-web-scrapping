@@ -698,6 +698,7 @@ _EXTRA_ALIASES: dict[str, tuple[str, ...]] = {
         "megnevezes",
         "megnevezés",
         "név",
+        "navn",
     ),
     "category": (
         "rubrik",
@@ -714,6 +715,8 @@ _EXTRA_ALIASES: dict[str, tuple[str, ...]] = {
         "kategoria dokumentu",
         "kategória",
         "kategoria",
+        "категорія",
+        "סוג מסמך",
     ),
     "summary": (
         "kurzfassung",
@@ -727,6 +730,9 @@ _EXTRA_ALIASES: dict[str, tuple[str, ...]] = {
         "ملخص المستند",
         "rovid leiras",
         "rövid leírás",
+        "sammanfattning",
+        "kortfattet",
+        "короткий зміст",
     ),
     "description": (
         "erlauterung",
@@ -742,6 +748,9 @@ _EXTRA_ALIASES: dict[str, tuple[str, ...]] = {
         "تفصيل",
         "reszletes leiras",
         "részletes leírás",
+        "beskrivning",
+        "опис",
+        "รายละเอียดสินค้า",
     ),
     "author": (
         "bearbeiter",
@@ -759,8 +768,16 @@ _EXTRA_ALIASES: dict[str, tuple[str, ...]] = {
         "作成者",
         "كُتب بواسطة",
         "كتب بواسطة",
+        "الكاتب",
         "szerzo",
         "szerző",
+        "forfatter",
+        "författare",
+        "автор документа",
+        "מחבר",
+        "מאת",
+        "ผู้แต่ง",
+        "ผู้เขียน",
     ),
     "tags": (
         "schlagworte",
@@ -774,6 +791,11 @@ _EXTRA_ALIASES: dict[str, tuple[str, ...]] = {
         "كلمات مفتاحية",
         "cimkek",
         "címkék",
+        "taggar",
+        "słowa kluczowe",
+        "ключові слова",
+        "แท็ก",
+        "תגיות",
     ),
 }
 
@@ -929,10 +951,17 @@ WEAK_HEADINGS = {
 
 _CJK = r"\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af"
 _INDIC = r"\u0900-\u0d7f"
+_GLUE = (
+    _CJK
+    + _INDIC
+    + r"\u0590-\u05ff\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff\u0e00-\u0e7f"
+)
 _LETTER = r"[^\W\d_]"
 _LABEL_CHAR = rf"(?:{_LETTER}|[\d_ &\-/'’.·])"
 _KR_PARTICLE = re.compile(r"(은|는|이|가|을|를|의)$")
 _JA_PARTICLE = re.compile(r"(は|が|を|の)$")
+_ZH_PARTICLE = re.compile(r"(是|为|為)$")
+_TRAILING_PARTICLE = re.compile(r"(은|는|이|가|을|를|의|は|が|を|の|是|为|為)$")
 _ASCII_SKIP = {
     "the",
     "ten",
@@ -968,8 +997,16 @@ _TRAILING_HINT = re.compile(
     r"(?:\s*[\*＊]+\s*|\s*\([^)]*\)\s*|\s*\[[^\]]*\]\s*|\s*（[^）]*）\s*|\s*【[^】]*】\s*)+$"
 )
 
-# Colon (including fullwidth, visarga, Armenian), ideographic space, two+ spaces, spaced dash/equals, pipe, or tab.
-_SEP = rf"(?:\t+|\u3000+|\s{{2,}}|\s*[:：︰ः։](?!//)\s*|\s+[-–—=]\s+|\s*\|\s*)"
+# Colon, visarga, Armenian, equals, ideographic/tab/2+ spaces, or a space after a CJK/RTL label.
+_SEP = (
+    rf"(?:\t+|\u3000+|\s{{2,}}"
+    rf"|\s*[:：︰ः։](?!//)\s*"
+    rf"|\s*[=＝](?!=)\s*"
+    rf"|\s+[-–—]\s+"
+    rf"|\s*\|\s*"
+    rf"|(?<=[{_GLUE}])\s+"
+    rf"|(?<=[是为為은는이가을를의はがをの])\s*)"
+)
 _LABEL_HINT = r"(?:\s*[\*＊]+|\s*\([^)]*\)|\s*\[[^\]]*\]|\s*（[^）]*）|\s*【[^】]*】)*"
 _LABEL = rf"{_LETTER}{_LABEL_CHAR}{{1,40}}"
 
@@ -979,7 +1016,7 @@ _LABEL_ONLY = re.compile(
 )
 
 _INLINE = re.compile(
-    rf"^\s*(?P<label>{_LABEL}){_LABEL_HINT}\s*{_SEP}(?P<value>.+?)\s*$",
+    rf"^\s*(?P<label>{_LABEL}){_LABEL_HINT}{_SEP}(?P<value>.+?)\s*$",
     re.IGNORECASE,
 )
 
@@ -991,6 +1028,7 @@ _DATE = re.compile(
     r"(?:"
     r"\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b|"
     r"\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日|"
+    r"\d{4}\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일|"
     r"\b(?:January|February|March|April|May|June|July|August|September|October|November|December|"
     r"Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|"
     r"enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|"
@@ -1076,17 +1114,12 @@ _ALIAS_ALT = "|".join(
     for alias in sorted({*_ALIAS_LOOKUP, *_ALIAS_ASCII}, key=len, reverse=True)
     if alias
 )
-_PARTICLE = r"(?:은|는|이|가|을|를|의|は|が|を|の)?"
+_PARTICLE = r"(?:은|는|이|가|을|를|의|は|が|を|の|是|为|為)?"
 _KNOWN_LABEL = rf"(?:{_ALIAS_ALT}){_PARTICLE}(?:\s*[\/|｜]\s*(?:{_ALIAS_ALT}){_PARTICLE})?"
-_GLUE = (
-    _CJK
-    + _INDIC
-    + r"\u0590-\u05ff\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff\u0e00-\u0e7f"
-)
 _FIELD_START = rf"(?:^|(?<=[\s;|/；。、，،؛\u3000{_GLUE}]))"
-_NEXT_FIELD = rf"(?:[\s\u3000]+|(?<=[{_GLUE}]))(?:{_KNOWN_LABEL}){_LABEL_HINT}\s*{_SEP}"
+_NEXT_FIELD = rf"(?:[\s\u3000]+|(?<=[{_GLUE}]))(?:{_KNOWN_LABEL}){_LABEL_HINT}{_SEP}"
 _KNOWN_LABELED = re.compile(
-    rf"(?im){_FIELD_START}(?P<label>{_KNOWN_LABEL}){_LABEL_HINT}\s*{_SEP}(?P<value>.+?)(?={_NEXT_FIELD}|$)"
+    rf"(?im){_FIELD_START}(?P<label>{_KNOWN_LABEL}){_LABEL_HINT}{_SEP}(?P<value>.+?)(?={_NEXT_FIELD}|$)"
 )
 _EXTRA_LABELED = re.compile(
     rf"(?im)(?:^|(?<=[\s\u3000]))(?P<label>{_LABEL}){_LABEL_HINT}\s*[:：︰ः։](?!//)\s*(?P<value>.+?)"
@@ -1094,13 +1127,17 @@ _EXTRA_LABELED = re.compile(
 )
 
 
-_INVISIBLE = dict.fromkeys(map(ord, "\ufeff\u200b\u200c\u200d\u2060\u00ad"), None)
+_INVISIBLE = dict.fromkeys(
+    map(ord, "\ufeff\u200b\u200c\u200d\u2060\u00ad\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069"),
+    None,
+)
 
 
 def strip_list_prefix(text: str) -> str:
-    text = unicodedata.normalize("NFKC", text or "")
+    text = (text or "").replace("\u3000", "\t")
     text = text.translate(_INVISIBLE)
-    text = text.replace("\u00a0", " ").replace("\u202f", " ").replace("\u3000", "\t")
+    text = unicodedata.normalize("NFKC", text)
+    text = text.replace("\u00a0", " ").replace("\u202f", " ")
     return _LIST_PREFIX.sub("", text.strip())
 
 
@@ -1128,16 +1165,12 @@ def match_canonical_field(label: str) -> str | None:
         hit = _ALIAS_LOOKUP.get(part) or _ALIAS_LOOKUP.get(_ascii_fold(part)) or _ALIAS_ASCII.get(_ascii_fold(part))
         if hit:
             return hit
-        stripped = _KR_PARTICLE.sub("", part)
-        if stripped != part and stripped:
-            hit = _ALIAS_LOOKUP.get(stripped) or _ALIAS_ASCII.get(_ascii_fold(stripped))
-            if hit:
-                return hit
-        stripped = _JA_PARTICLE.sub("", part)
-        if stripped != part and stripped:
-            hit = _ALIAS_LOOKUP.get(stripped)
-            if hit:
-                return hit
+        for particle in (_KR_PARTICLE, _JA_PARTICLE, _ZH_PARTICLE, _TRAILING_PARTICLE):
+            stripped = particle.sub("", part)
+            if stripped != part and stripped:
+                hit = _ALIAS_LOOKUP.get(stripped) or _ALIAS_ASCII.get(_ascii_fold(stripped))
+                if hit:
+                    return hit
     return None
 
 
@@ -1187,8 +1220,15 @@ def parse_all_labeled_fields(text: str) -> list[tuple[str, str]]:
         item = (key, value)
         if item in seen:
             return
-        if key in KNOWN_FIELDS and any(existing == key for existing, _ in found):
-            return
+        if key in KNOWN_FIELDS:
+            existing = next((i for i, (found_key, _) in enumerate(found) if found_key == key), None)
+            if existing is not None:
+                previous = found[existing][1]
+                if value_quality(key, value) > value_quality(key, previous):
+                    seen.discard((key, previous))
+                    found[existing] = item
+                    seen.add(item)
+                return
         seen.add(item)
         found.append(item)
 
