@@ -24,8 +24,8 @@ export default function FileBackstage({
   return (
     <div className="backstage">
       <nav className="backstage-nav" aria-label="File">
-        <button type="button" className="backstage-back" onClick={onBack}>
-          ← Back
+        <button type="button" className="backstage-back" onClick={onBack} title="Back">
+          ←
         </button>
         {[
           ["info", "Info"],

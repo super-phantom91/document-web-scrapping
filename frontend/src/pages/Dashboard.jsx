@@ -21,6 +21,7 @@ export default function Dashboard() {
   const [busy, setBusy] = useState(false);
   const [dropActive, setDropActive] = useState(false);
   const [section, setSection] = useState("home");
+  const [query, setQuery] = useState("");
 
   async function refresh() {
     const data = await api("/documents");
@@ -78,6 +79,10 @@ export default function Dashboard() {
     }
   }
 
+  const recent = documents.filter((doc) =>
+    `${doc.title} ${doc.ownerName}`.toLowerCase().includes(query.trim().toLowerCase())
+  );
+
   return (
     <div
       className="word-start"
@@ -126,6 +131,14 @@ export default function Dashboard() {
           {section === "home" && (
             <>
               <h1>Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}</h1>
+              <label className="start-search">
+                <span aria-hidden="true">⌕</span>
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search for online templates"
+                />
+              </label>
               <div className="template-row">
                 <button type="button" className="template-card" onClick={createDoc} disabled={busy}>
                   <span className="template-page" />
@@ -137,11 +150,11 @@ export default function Dashboard() {
                 </button>
               </div>
               <h2>Recent</h2>
-              {documents.length === 0 ? (
+              {recent.length === 0 ? (
                 <p className="muted">Open a Word document from this computer, or start a blank page.</p>
               ) : (
                 <ul className="recent-list">
-                  {documents.map((doc) => (
+                  {recent.map((doc) => (
                     <li key={doc.id}>
                       <button type="button" onClick={() => navigate(`/d/${doc.id}`)}>
                         <span className="doc-preview">W</span>

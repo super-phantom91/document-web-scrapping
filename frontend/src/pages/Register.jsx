@@ -26,13 +26,12 @@ export default function Register() {
 
   return (
     <div className="auth-shell">
-      <aside className="auth-brand">
-        <div className="brand-mark">DS</div>
-        <h1>Your team’s shared document desk.</h1>
-        <p>Create an account, open a page, and invite anyone with the link. Formatting works like Word.</p>
-      </aside>
       <main className="auth-card">
+        <div className="brand-mark" aria-hidden="true">
+          W
+        </div>
         <h2>Create account</h2>
+        <p className="muted">to use Word in this browser</p>
         <form onSubmit={onSubmit} className="auth-form">
           <label>
             Username

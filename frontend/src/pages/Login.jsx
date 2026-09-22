@@ -26,17 +26,12 @@ export default function Login() {
 
   return (
     <div className="auth-shell">
-      <aside className="auth-brand">
-        <div className="brand-mark">DS</div>
-        <h1>Write together. Extract anything.</h1>
-        <p>
-          DocuSync is a multi-person Word-style editor. Co-author in real time, then pull names,
-          categories, images, and tables from a DOCX with one click.
-        </p>
-      </aside>
       <main className="auth-card">
+        <div className="brand-mark" aria-hidden="true">
+          W
+        </div>
         <h2>Sign in</h2>
-        <p className="muted">Use the same document link with your team — everyone sees live cursors.</p>
+        <p className="muted">to continue to Word</p>
         <form onSubmit={onSubmit} className="auth-form">
           <label>
             Username

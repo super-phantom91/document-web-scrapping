@@ -347,53 +347,59 @@ export default function EditorPage() {
       }}
     >
       <header className="editor-top word-titlebar">
-        <span className="word-mark" title="Word">
-          W
-        </span>
-        <div className="qat">
-          <button type="button" className="qat-btn" title="Save (Ctrl+S)" onClick={saveToast}>
-            <Save size={14} />
+        <div className="title-left">
+          <span className="word-mark" title="Word">
+            W
+          </span>
+          <div className="qat">
+            <button type="button" className="qat-btn" title="Save (Ctrl+S)" onClick={saveToast}>
+              <Save size={14} />
+            </button>
+            <button type="button" className="qat-btn" title="Undo" onClick={() => editor?.chain().focus().undo().run()}>
+              <Undo2 size={14} />
+            </button>
+            <button type="button" className="qat-btn" title="Redo" onClick={() => editor?.chain().focus().redo().run()}>
+              <Redo2 size={14} />
+            </button>
+          </div>
+        </div>
+        <div className="title-center">
+          <input className="title-input" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <span className="word-ext">.docx</span>
+          <span className="autosave">AutoSave On</span>
+        </div>
+        <div className="title-right">
+          <label className="tell-me">
+            <Search size={14} />
+            <input
+              placeholder="Tell me what you want to do"
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                const q = e.target.value.toLowerCase();
+                if (q.includes("find")) setFindOpen(true);
+                else if (q.includes("print")) window.print();
+                else if (q.includes("open")) {
+                  openFileMenu();
+                  setFileSection("open");
+                } else if (q.includes("extract") || q.includes("insight") || q.includes("scrap")) extract();
+                else setFindQuery(e.target.value);
+              }}
+            />
+          </label>
+          <div className="peer-row">
+            {peers.map((peer, i) => (
+              <span key={`${peer.name}-${i}`} className="avatar" style={{ background: peer.color }} title={peer.name}>
+                {peer.name.slice(0, 1).toUpperCase()}
+              </span>
+            ))}
+          </div>
+          <button className="btn share-btn" onClick={share}>
+            <Share2 size={14} /> Share
           </button>
-          <button type="button" className="qat-btn" title="Undo" onClick={() => editor?.chain().focus().undo().run()}>
-            <Undo2 size={14} />
-          </button>
-          <button type="button" className="qat-btn" title="Redo" onClick={() => editor?.chain().focus().redo().run()}>
-            <Redo2 size={14} />
+          <button className="btn" onClick={extract} disabled={extracting} title="Scrap name, category, and other fields">
+            <ScanSearch size={14} className={extracting ? "spin" : ""} /> {extracting ? "Scrapping…" : "Scrap"}
           </button>
         </div>
-        <input className="title-input" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <span className="word-ext">.docx - Word</span>
-        <span className="autosave">Autosave On</span>
-        <label className="tell-me">
-          <Search size={14} />
-          <input
-            placeholder="Tell me what you want to do"
-            onKeyDown={(e) => {
-              if (e.key !== "Enter") return;
-              const q = e.target.value.toLowerCase();
-              if (q.includes("find")) setFindOpen(true);
-              else if (q.includes("print")) window.print();
-              else if (q.includes("open")) {
-                openFileMenu();
-                setFileSection("open");
-              } else if (q.includes("extract") || q.includes("insight") || q.includes("scrap")) extract();
-              else setFindQuery(e.target.value);
-            }}
-          />
-        </label>
-        <div className="peer-row">
-          {peers.map((peer, i) => (
-            <span key={`${peer.name}-${i}`} className="avatar" style={{ background: peer.color }} title={peer.name}>
-              {peer.name.slice(0, 1).toUpperCase()}
-            </span>
-          ))}
-        </div>
-        <button className="btn ghost light" onClick={share}>
-          <Share2 size={16} /> Share
-        </button>
-        <button className="btn primary" onClick={extract} disabled={extracting} title="Scrap name, category, and other fields">
-          <ScanSearch size={16} className={extracting ? "spin" : ""} /> {extracting ? "Scrapping…" : "Scrap"}
-        </button>
       </header>
       <input
         ref={fileRef}
@@ -490,12 +496,16 @@ export default function EditorPage() {
               >
                 {showRuler && viewMode === "print" && (
                   <div className="ruler" aria-hidden="true">
-                    {Array.from({ length: 9 }, (_, inch) => (
-                      <span key={inch} className="ruler-inch" style={{ left: `${inch * 96}px` }}>
-                        {inch}
-                        <i />
-                      </span>
-                    ))}
+                    {Array.from({ length: 69 }, (_, i) => {
+                      const inch = i / 8;
+                      const kind = i % 8 === 0 ? "inch" : i % 4 === 0 ? "half" : "eighth";
+                      return (
+                        <span key={i} className={`ruler-tick ${kind}`} style={{ left: `${inch * 96}px` }}>
+                          {kind === "inch" ? i / 8 : null}
+                          {kind === "inch" ? <i /> : null}
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
                 <div className={`page ${viewMode}`}>
@@ -515,21 +525,35 @@ export default function EditorPage() {
             )}
           </div>
           <footer className="status-bar word-status">
-            <span>Page 1 of 1</span>
-            <span>{words} words</span>
-            <span>{chars} characters</span>
-            <span>English (United States)</span>
-            <span className={extracting ? "status-live" : ""}>
+            <span className="status-item">Page 1 of 1</span>
+            <span className="status-item">{words} words</span>
+            <span className="status-item">{chars} characters</span>
+            <span className="status-item">English (United States)</span>
+            <span className={`status-item ${extracting ? "status-live" : ""}`}>
               {extracting
                 ? "Scrapping…"
                 : extraction
                   ? `${["name", "category", "summary", "description", "author", "tags"].filter((key) => extraction[key]).length} fields scraped`
                   : "Ready"}
             </span>
-            <span>{peers.length} editing</span>
+            <span className="status-item">{peers.length} editing</span>
+            <div className="status-views">
+              <button type="button" className={viewMode === "print" ? "active" : ""} title="Print Layout" onClick={() => setViewMode("print")}>
+                Print Layout
+              </button>
+              <button type="button" className={viewMode === "web" ? "active" : ""} title="Web Layout" onClick={() => setViewMode("web")}>
+                Web Layout
+              </button>
+            </div>
             <label className="zoom-control">
-              <span>{zoom}%</span>
+              <button type="button" className="zoom-btn" title="Zoom out" onClick={() => setZoom((n) => Math.max(75, n - 5))}>
+                −
+              </button>
               <input type="range" min="75" max="150" step="5" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} />
+              <button type="button" className="zoom-btn" title="Zoom in" onClick={() => setZoom((n) => Math.min(150, n + 5))}>
+                +
+              </button>
+              <span>{zoom}%</span>
             </label>
           </footer>
         </>

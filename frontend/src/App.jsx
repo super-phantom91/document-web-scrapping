@@ -7,14 +7,14 @@ import Editor from "./pages/Editor.jsx";
 
 function Guard({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="boot">Loading DocuSync…</div>;
+  if (loading) return <div className="boot">Starting Word…</div>;
   if (!user) return <Navigate to="/login" replace />;
   return children;
 }
 
 function PublicOnly({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="boot">Loading DocuSync…</div>;
+  if (loading) return <div className="boot">Starting Word…</div>;
   if (user) return <Navigate to="/" replace />;
   return children;
 }
