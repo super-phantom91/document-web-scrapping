@@ -47,8 +47,65 @@ export function createUser(user) {
 
 export function listDocumentsForUser(userId) {
   return readStore()
-    .documents.filter((d) => d.ownerId === userId || d.visibility === "link")
-    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    .documents.filter((d) => isDocumentMember(d, userId))
+    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+    .map((d) => publicDocument(d, userId));
+}
+
+export function isDocumentMember(doc, userId) {
+  return doc.ownerId === userId || (doc.memberIds || []).includes(userId);
+}
+
+export function canAccessDocument(doc, userId) {
+  if (!doc) return false;
+  if (isDocumentMember(doc, userId)) return true;
+  return doc.visibility === "link";
+}
+
+export function addDocumentMember(id, userId) {
+  const store = readStore();
+  const doc = store.documents.find((d) => d.id === id);
+  if (!doc) return null;
+  doc.memberIds = Array.isArray(doc.memberIds) ? doc.memberIds : [];
+  if (userId && doc.ownerId !== userId && !doc.memberIds.includes(userId)) {
+    doc.memberIds.push(userId);
+    writeStore(store);
+  }
+  return doc;
+}
+
+export function removeDocumentMember(id, userId) {
+  const store = readStore();
+  const doc = store.documents.find((d) => d.id === id);
+  if (!doc) return null;
+  doc.memberIds = (doc.memberIds || []).filter((memberId) => memberId !== userId);
+  writeStore(store);
+  return doc;
+}
+
+export function publicDocument(doc, viewerId) {
+  if (!doc) return null;
+  const store = readStore();
+  const owner = store.users.find((u) => u.id === doc.ownerId);
+  const people = [
+    owner ? { ...publicUser(owner), role: "Owner" } : null,
+    ...(doc.memberIds || [])
+      .map((memberId) => store.users.find((u) => u.id === memberId))
+      .filter(Boolean)
+      .map((u) => ({ ...publicUser(u), role: "Can edit" })),
+  ].filter(Boolean);
+  return {
+    id: doc.id,
+    title: doc.title,
+    ownerId: doc.ownerId,
+    ownerName: doc.ownerName,
+    visibility: doc.visibility || "link",
+    initialHtml: doc.initialHtml || "",
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
+    shared: Boolean(viewerId && doc.ownerId !== viewerId),
+    people,
+  };
 }
 
 export function getDocument(id) {
@@ -57,9 +114,9 @@ export function getDocument(id) {
 
 export function createDocument(doc) {
   const store = readStore();
-  store.documents.push(doc);
+  store.documents.push({ memberIds: [], visibility: "link", ...doc });
   writeStore(store);
-  return doc;
+  return store.documents[store.documents.length - 1];
 }
 
 export function updateDocument(id, patch) {

@@ -128,10 +128,28 @@ export default function FileBackstage({
         {section === "share" && (
           <div className="backstage-section">
             <h1>Share</h1>
-            <p>Anyone signed in with this link can edit the document at the same time.</p>
+            <p>Invite people by username, or copy a link so anyone signed in can edit at the same time.</p>
             <button type="button" className="btn primary" onClick={onShare}>
-              Copy link
+              Share this document
             </button>
+            {current?.people?.length > 0 && (
+              <>
+                <h2>People with access</h2>
+                <ul className="recent-list">
+                  {current.people.map((person) => (
+                    <li key={person.id}>
+                      <span className="avatar" style={{ background: person.color }}>
+                        {person.username.slice(0, 1).toUpperCase()}
+                      </span>
+                      <span>
+                        <strong>{person.username}</strong>
+                        <em>{person.role}</em>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </div>
         )}
       </div>

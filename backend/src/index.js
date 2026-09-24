@@ -30,7 +30,7 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: err.message || "Server error." });
 });
 
-app.listen(PORT, async () => {
+app.listen(PORT, "0.0.0.0", async () => {
   console.log(`DocuSync API http://localhost:${PORT}`);
   try {
     await initDb();

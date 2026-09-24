@@ -31,7 +31,7 @@ export default function Login() {
           W
         </div>
         <h2>Sign in</h2>
-        <p className="muted">to continue to Word</p>
+        <p className="muted">Use your own account. Several people can edit the same document together.</p>
         <form onSubmit={onSubmit} className="auth-form">
           <label>
             Username

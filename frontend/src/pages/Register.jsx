@@ -31,7 +31,7 @@ export default function Register() {
           W
         </div>
         <h2>Create account</h2>
-        <p className="muted">to use Word in this browser</p>
+        <p className="muted">Each person signs in with their own username, then you can share a document.</p>
         <form onSubmit={onSubmit} className="auth-form">
           <label>
             Username

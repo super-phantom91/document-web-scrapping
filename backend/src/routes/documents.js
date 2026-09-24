@@ -5,10 +5,15 @@ import { v4 as uuid } from "uuid";
 import multer from "multer";
 import mammoth from "mammoth";
 import {
+  addDocumentMember,
+  canAccessDocument,
   createDocument,
   deleteDocument,
+  findUserByUsername,
   getDocument,
   listDocumentsForUser,
+  publicDocument,
+  removeDocumentMember,
   updateDocument,
   UPLOADS_DIR,
 } from "../store.js";
@@ -30,7 +35,15 @@ const upload = multer({
 });
 
 function canAccess(doc, user) {
-  return doc.ownerId === user.id || doc.visibility === "link";
+  return canAccessDocument(doc, user.id);
+}
+
+function canManage(doc, user) {
+  return doc.ownerId === user.id;
+}
+
+function sendDoc(res, doc, user, status = 200) {
+  res.status(status).json({ document: publicDocument(doc, user.id) });
 }
 
 router.get("/", (req, res) => {
@@ -44,13 +57,14 @@ router.post("/", (req, res) => {
     title,
     ownerId: req.user.id,
     ownerName: req.user.username,
+    memberIds: [],
     visibility: "link",
     initialHtml: "<h1></h1><p></p>",
     docxPath: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
-  res.status(201).json({ document: doc });
+  res.status(201).json({ document: publicDocument(doc, req.user.id) });
 });
 
 router.post("/import", upload.single("file"), async (req, res) => {
@@ -68,13 +82,14 @@ router.post("/import", upload.single("file"), async (req, res) => {
       title,
       ownerId: req.user.id,
       ownerName: req.user.username,
+      memberIds: [],
       visibility: "link",
       initialHtml: result.value || "<p></p>",
       docxPath: req.file.path,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
-    res.status(201).json({ document: doc });
+    res.status(201).json({ document: publicDocument(doc, req.user.id) });
   } catch (err) {
     return res.status(422).json({ error: `Could not import DOCX: ${err.message}` });
   }
@@ -84,7 +99,32 @@ router.get("/:id", (req, res) => {
   const doc = getDocument(req.params.id);
   if (!doc) return res.status(404).json({ error: "Document not found." });
   if (!canAccess(doc, req.user)) return res.status(403).json({ error: "You do not have access to this document." });
-  res.json({ document: doc });
+  const opened = addDocumentMember(doc.id, req.user.id) || doc;
+  sendDoc(res, opened, req.user);
+});
+
+router.post("/:id/share", (req, res) => {
+  const doc = getDocument(req.params.id);
+  if (!doc) return res.status(404).json({ error: "Document not found." });
+  if (!canAccess(doc, req.user)) return res.status(403).json({ error: "You cannot share this document." });
+
+  const username = String(req.body?.username || "").trim();
+  if (!username) return res.status(400).json({ error: "Enter a username to invite." });
+  const invitee = findUserByUsername(username);
+  if (!invitee) return res.status(404).json({ error: "No account with that username." });
+  if (invitee.id === doc.ownerId) return res.status(400).json({ error: "That person already owns this document." });
+
+  const updated = addDocumentMember(doc.id, invitee.id) || doc;
+  sendDoc(res, updated, req.user);
+});
+
+router.delete("/:id/share/:userId", (req, res) => {
+  const doc = getDocument(req.params.id);
+  if (!doc) return res.status(404).json({ error: "Document not found." });
+  if (!canManage(doc, req.user)) return res.status(403).json({ error: "Only the owner can remove people." });
+  if (req.params.userId === doc.ownerId) return res.status(400).json({ error: "The owner cannot be removed." });
+  const updated = removeDocumentMember(doc.id, req.params.userId) || doc;
+  sendDoc(res, updated, req.user);
 });
 
 router.patch("/:id", (req, res) => {
@@ -99,8 +139,14 @@ router.patch("/:id", (req, res) => {
   if (typeof req.body?.initialHtml === "string") {
     patch.initialHtml = req.body.initialHtml;
   }
+  if (req.body?.visibility === "link" || req.body?.visibility === "private") {
+    if (!canManage(doc, req.user)) {
+      return res.status(403).json({ error: "Only the owner can change link sharing." });
+    }
+    patch.visibility = req.body.visibility;
+  }
   const updated = updateDocument(doc.id, patch);
-  res.json({ document: updated });
+  sendDoc(res, updated, req.user);
 });
 
 router.delete("/:id", async (req, res) => {

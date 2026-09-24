@@ -161,6 +161,7 @@ export default function Dashboard() {
                         <span>
                           <strong>{doc.title}.docx</strong>
                           <em>
+                            {doc.shared ? "Shared · " : ""}
                             {doc.ownerName} · {formatDate(doc.updatedAt)}
                           </em>
                         </span>
@@ -211,6 +212,7 @@ export default function Dashboard() {
                       <span>
                         <strong>{doc.title}.docx</strong>
                         <em>
+                          {doc.shared ? "Shared · " : ""}
                           {doc.ownerName} · {formatDate(doc.updatedAt)}
                         </em>
                       </span>

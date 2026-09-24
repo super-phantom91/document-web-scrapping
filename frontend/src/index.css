@@ -903,6 +903,57 @@ a { color: var(--brand); text-decoration: none; }
   to { opacity: 1; transform: none; }
 }
 
+.share-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: grid;
+  place-items: start end;
+  padding: 48px 16px 16px;
+  z-index: 30;
+}
+.share-dialog {
+  width: min(420px, 100%);
+  background: #fff;
+  box-shadow: var(--shadow);
+  border: 1px solid #d2d0ce;
+  padding: 16px 20px 20px;
+}
+.share-dialog header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.share-dialog h2 { margin: 0; font-size: 20px; font-weight: 600; }
+.share-dialog h3 { margin: 18px 0 8px; font-size: 13px; font-weight: 600; }
+.share-invite { display: flex; gap: 8px; margin-bottom: 10px; }
+.share-invite input {
+  flex: 1;
+  border: 1px solid #8a8886;
+  border-radius: 2px;
+  padding: 8px 10px;
+}
+.share-people { list-style: none; padding: 0; margin: 0; }
+.share-people li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid #edebe9;
+}
+.share-people li span:nth-child(2) { flex: 1; }
+.share-people strong, .share-people em { display: block; }
+.share-people em { color: var(--muted); font-size: 12px; font-style: normal; }
+.share-live { display: flex; align-items: center; gap: 8px; }
+.share-link-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 12px;
+  font-size: 13px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation: none !important;
@@ -924,7 +975,7 @@ a { color: var(--brand); text-decoration: none; }
 }
 
 @media print {
-  .editor-top, .word-ribbon, .status-bar, .extract-panel, .find-bar, .ruler, .nav-pane, .drop-overlay, .backstage { display: none !important; }
+  .editor-top, .word-ribbon, .status-bar, .extract-panel, .find-bar, .ruler, .nav-pane, .drop-overlay, .backstage, .share-overlay { display: none !important; }
   .page { box-shadow: none; border: 0; width: auto; }
   .page-wrap, .page-stage { padding: 0; transform: none !important; background: #fff; }
   .page-editor hr { border: 0; height: 0; margin: 0; }

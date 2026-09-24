@@ -31,8 +31,13 @@ import Toolbar from "../components/Toolbar.jsx";
 import ExtractPanel from "../components/ExtractPanel.jsx";
 import FileBackstage from "../components/FileBackstage.jsx";
 import NavPane from "../components/NavPane.jsx";
+import ShareDialog from "../components/ShareDialog.jsx";
 
-const COLLAB_URL = import.meta.env.VITE_COLLAB_URL || "ws://localhost:1234";
+function collabUrl() {
+  if (import.meta.env.VITE_COLLAB_URL) return import.meta.env.VITE_COLLAB_URL;
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.hostname}:1234`;
+}
 
 export default function EditorPage() {
   const { id } = useParams();
@@ -47,6 +52,7 @@ export default function EditorPage() {
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState("");
   const [mysqlInfo, setMysqlInfo] = useState(null);
+  const [shareOpen, setShareOpen] = useState(false);
   const [shareNote, setShareNote] = useState("");
   const [zoom, setZoom] = useState(100);
   const [findOpen, setFindOpen] = useState(false);
@@ -90,14 +96,15 @@ export default function EditorPage() {
 
   useEffect(() => {
     const p = new HocuspocusProvider({
-      url: COLLAB_URL,
+      url: collabUrl(),
       name: id,
       document: ydoc,
       token: getToken(),
     });
+    p.setAwarenessField("user", { name: user.username, color: user.color, id: user.id });
     setProvider(p);
     return () => p.destroy();
-  }, [id, ydoc]);
+  }, [id, ydoc, user]);
 
   const editor = useEditor(
     {
@@ -126,7 +133,7 @@ export default function EditorPage() {
           ? [
               CollaborationCursor.configure({
                 provider,
-                user: { name: user.username, color: user.color },
+                user: { name: user.username, color: user.color, id: user.id },
               }),
             ]
           : []),
@@ -206,14 +213,8 @@ export default function EditorPage() {
   }
 
   async function share() {
-    const url = window.location.href;
-    try {
-      await navigator.clipboard.writeText(url);
-      setShareNote("Link copied — anyone signed in can edit.");
-    } catch {
-      setShareNote(url);
-    }
-    setTimeout(() => setShareNote(""), 2500);
+    setShareOpen(true);
+    setFileOpen(false);
   }
 
   function saveToast() {
@@ -328,6 +329,7 @@ export default function EditorPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  const uniquePeers = [...new Map(peers.filter((peer) => peer?.name).map((peer) => [peer.name, peer])).values()];
   const words = editor?.storage.characterCount?.words?.() || 0;
   const chars = editor?.storage.characterCount?.characters?.() || 0;
 
@@ -387,8 +389,8 @@ export default function EditorPage() {
             />
           </label>
           <div className="peer-row">
-            {peers.map((peer, i) => (
-              <span key={`${peer.name}-${i}`} className="avatar" style={{ background: peer.color }} title={peer.name}>
+            {uniquePeers.map((peer) => (
+              <span key={peer.name} className="avatar" style={{ background: peer.color }} title={peer.name}>
                 {peer.name.slice(0, 1).toUpperCase()}
               </span>
             ))}
@@ -536,7 +538,7 @@ export default function EditorPage() {
                   ? `${["name", "category", "summary", "description", "author", "tags"].filter((key) => extraction[key]).length} fields scraped`
                   : "Ready"}
             </span>
-            <span className="status-item">{peers.length} editing</span>
+            <span className="status-item">{uniquePeers.length} editing</span>
             <div className="status-views">
               <button type="button" className={viewMode === "print" ? "active" : ""} title="Print Layout" onClick={() => setViewMode("print")}>
                 Print Layout
@@ -557,6 +559,15 @@ export default function EditorPage() {
             </label>
           </footer>
         </>
+      )}
+      {shareOpen && meta && (
+        <ShareDialog
+          document={meta}
+          user={user}
+          peers={uniquePeers}
+          onClose={() => setShareOpen(false)}
+          onChange={setMeta}
+        />
       )}
       {dropActive && <div className="drop-overlay">Drop a Word document (.docx) to open it</div>}
     </div>
